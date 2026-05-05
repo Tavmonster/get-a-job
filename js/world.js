@@ -82,22 +82,24 @@ const World = (() => {
         ground.receiveShadows = true;
 
         // ── Roads ─────────────────────────────────────────────────────
-        // Horizontal roads
-        for (let row = 0; row < ROWS; row++) {
+        // Horizontal roads — placed between rows (at half-integer offsets)
+        // ROWS+1 roads so streets frame every row of buildings
+        for (let row = 0; row <= ROWS; row++) {
             const road = BABYLON.MeshBuilder.CreateGround("roadH_" + row, {
                 width: COLS * BLOCK + 40,
                 height: 8,
             }, scene);
-            road.position.set(0, 0.01, OZ + row * BLOCK);
+            road.position.set(0, 0.01, OZ + (row - 0.5) * BLOCK);
             road.material = mat(scene, COLOURS.road);
         }
-        // Vertical roads
-        for (let col = 0; col < COLS; col++) {
+        // Vertical roads — placed between columns (at half-integer offsets)
+        // COLS+1 roads so streets frame every column of buildings
+        for (let col = 0; col <= COLS; col++) {
             const road = BABYLON.MeshBuilder.CreateGround("roadV_" + col, {
                 width: 8,
                 height: ROWS * BLOCK + 40,
             }, scene);
-            road.position.set(OX + col * BLOCK, 0.01, 0);
+            road.position.set(OX + (col - 0.5) * BLOCK, 0.01, 0);
             road.material = mat(scene, COLOURS.road);
         }
 
