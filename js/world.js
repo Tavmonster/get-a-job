@@ -21,6 +21,11 @@ const World = (() => {
         door:        "#6B3A2A",
         parkGrass:   "#2ecc71",
         deliveryMkr: "#FFD700",
+        slideClr:    "#e74c3c",
+        swingFrame:  "#95a5a6",
+        swingSeat:   "#f39c12",
+        sandFloor:   "#e8c87a",
+        sandWall:    "#a07840",
     };
 
     function mat(scene, hex, alpha) {
@@ -206,6 +211,15 @@ const World = (() => {
         if (col === 0 && row === 0) {
             addBench(scene, gridPos(0, 0));
         }
+        if (col === 1 && row === 0) {
+            addSlide(scene, gridPos(1, 0));
+        }
+        if (col === 0 && row === 1) {
+            addSwings(scene, gridPos(0, 1));
+        }
+        if (col === 1 && row === 1) {
+            addSandbox(scene, gridPos(1, 1));
+        }
     }
 
     function addBench(scene, pos) {
@@ -226,6 +240,111 @@ const World = (() => {
         const back = BABYLON.MeshBuilder.CreateBox("benchBack", { width: 3.5, height: 0.8, depth: 0.15 }, scene);
         back.position.set(pos.x, 1.1, pos.z + 0.45);
         back.material = mat(scene, COLOURS.bench);
+    }
+
+    // ── Slide ─────────────────────────────────────────────────────────
+    function addSlide(scene, pos) {
+        const poleH = 4;
+        const metalColor = COLOURS.swingFrame;
+
+        // Two vertical back support poles
+        for (const ox of [-1.0, 1.0]) {
+            const pole = BABYLON.MeshBuilder.CreateCylinder("slidePole_" + ox, { height: poleH, diameter: 0.22 }, scene);
+            pole.position.set(pos.x + ox, poleH / 2, pos.z);
+            pole.material = mat(scene, metalColor);
+        }
+
+        // Platform at top
+        const platform = BABYLON.MeshBuilder.CreateBox("slidePlatform", { width: 2.4, height: 0.25, depth: 2 }, scene);
+        platform.position.set(pos.x, poleH + 0.125, pos.z + 0.5);
+        platform.material = mat(scene, metalColor);
+        platform.checkCollisions = true;
+
+        // Ladder rungs
+        for (let i = 0; i < 4; i++) {
+            const rung = BABYLON.MeshBuilder.CreateCylinder("slideRung_" + i, { height: 2.0, diameter: 0.13 }, scene);
+            rung.rotation.z = Math.PI / 2;
+            rung.position.set(pos.x, 0.6 + i * 0.9, pos.z - 0.8);
+            rung.material = mat(scene, metalColor);
+        }
+
+        // Slide ramp
+        const horizDist = 5.5;
+        const rampLen = Math.sqrt(poleH * poleH + horizDist * horizDist);
+        const rampAngle = Math.atan2(poleH, horizDist);
+        const ramp = BABYLON.MeshBuilder.CreateBox("slideRamp", { width: 1.8, height: 0.15, depth: rampLen }, scene);
+        ramp.position.set(pos.x, poleH / 2, pos.z + 1.5 + horizDist / 2);
+        ramp.rotation.x = rampAngle;
+        ramp.material = mat(scene, COLOURS.slideClr);
+
+        // Side rails
+        for (const ox of [-0.95, 0.95]) {
+            const rail = BABYLON.MeshBuilder.CreateBox("slideRail_" + ox, { width: 0.1, height: 0.4, depth: rampLen }, scene);
+            rail.position.set(pos.x + ox, poleH / 2 + 0.2, pos.z + 1.5 + horizDist / 2);
+            rail.rotation.x = rampAngle;
+            rail.material = mat(scene, metalColor);
+        }
+    }
+
+    // ── Swings ────────────────────────────────────────────────────────
+    function addSwings(scene, pos) {
+        const frameH = 4.5;
+        const metalColor = COLOURS.swingFrame;
+
+        // Two vertical A-frame supports
+        for (const ox of [-3.0, 3.0]) {
+            for (const oz of [-0.7, 0.7]) {
+                const leg = BABYLON.MeshBuilder.CreateCylinder("swingLeg_" + ox + oz, { height: frameH + 0.6, diameter: 0.2 }, scene);
+                leg.position.set(pos.x + ox, (frameH + 0.6) / 2, pos.z + oz);
+                leg.rotation.x = oz > 0 ? -0.15 : 0.15;
+                leg.material = mat(scene, metalColor);
+            }
+        }
+
+        // Top horizontal bar
+        const bar = BABYLON.MeshBuilder.CreateCylinder("swingBar", { height: 7.0, diameter: 0.18 }, scene);
+        bar.rotation.z = Math.PI / 2;
+        bar.position.set(pos.x, frameH, pos.z);
+        bar.material = mat(scene, metalColor);
+
+        // Three swings
+        const swingOffsets = [-2.0, 0.0, 2.0];
+        for (const ox of swingOffsets) {
+            const chainLen = 3.0;
+            const chain = BABYLON.MeshBuilder.CreateCylinder("swingChain_" + ox, { height: chainLen, diameter: 0.07 }, scene);
+            chain.position.set(pos.x + ox, frameH - chainLen / 2, pos.z);
+            chain.material = mat(scene, metalColor);
+
+            const seat = BABYLON.MeshBuilder.CreateBox("swingSeat_" + ox, { width: 1.1, height: 0.14, depth: 0.45 }, scene);
+            seat.position.set(pos.x + ox, frameH - chainLen - 0.07, pos.z);
+            seat.material = mat(scene, COLOURS.swingSeat);
+        }
+    }
+
+    // ── Sandbox ───────────────────────────────────────────────────────
+    function addSandbox(scene, pos) {
+        const size = 5.5;
+        const wallH = 0.45;
+        const wallT = 0.35;
+
+        // Sand floor
+        const sand = BABYLON.MeshBuilder.CreateGround("sandboxFloor", { width: size, height: size }, scene);
+        sand.position.set(pos.x, 0.03, pos.z);
+        sand.material = mat(scene, COLOURS.sandFloor);
+
+        // Four wooden border walls
+        const wallDefs = [
+            { w: size + wallT * 2, d: wallT, x: 0,          z:  size / 2, name: "N" },
+            { w: size + wallT * 2, d: wallT, x: 0,          z: -size / 2, name: "S" },
+            { w: wallT,            d: size,  x:  size / 2,  z: 0,         name: "E" },
+            { w: wallT,            d: size,  x: -size / 2,  z: 0,         name: "W" },
+        ];
+        for (const wd of wallDefs) {
+            const wall = BABYLON.MeshBuilder.CreateBox("sbWall" + wd.name, { width: wd.w, height: wallH, depth: wd.d }, scene);
+            wall.position.set(pos.x + wd.x, wallH / 2, pos.z + wd.z);
+            wall.material = mat(scene, COLOURS.sandWall);
+            wall.checkCollisions = true;
+        }
     }
 
     // ── Store ─────────────────────────────────────────────────────────
