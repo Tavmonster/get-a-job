@@ -44,7 +44,8 @@ const World = (() => {
     const PARK_ROWS  = [0, 1];
     const STORE_POS  = { col: 5, row: 1 };
     const HOTEL_POS  = { col: 5, row: 5 };
-    const DEPOT_POS  = { col: 1, row: 5 };
+    const DEPOT_POS         = { col: 1, row: 5 };
+    const DEPOT_FORECOURT_POS = { col: DEPOT_POS.col, row: DEPOT_POS.row - 1 };
 
     // World-space origin offset so the grid is centred
     const OX = -((COLS - 1) / 2) * BLOCK;
@@ -57,11 +58,11 @@ const World = (() => {
     // ── Delivery house positions (5 spread-out residential buildings) ─
     // These are non-special buildings at predefined grid locations
     const DELIVERY_CELLS = [
-        { col: 0, row: 3 },
-        { col: 2, row: 0 },
+        { col: 0, row: 4 },
+        { col: 2, row: 2 },
         { col: 3, row: 4 },
-        { col: 6, row: 2 },
-        { col: 4, row: 6 },
+        { col: 6, row: 3 },
+        { col: 4, row: 2 },
     ];
 
     function isDeliveryCell(col, row) {
@@ -103,11 +104,12 @@ const World = (() => {
         // ── Buildings ─────────────────────────────────────────────────
         for (let col = 0; col < COLS; col++) {
             for (let row = 0; row < ROWS; row++) {
-                const isPark  = PARK_COLS.includes(col) && PARK_ROWS.includes(row);
-                const isStore = col === STORE_POS.col && row === STORE_POS.row;
-                const isHotel = col === HOTEL_POS.col && row === HOTEL_POS.row;
-                const isDepot = col === DEPOT_POS.col && row === DEPOT_POS.row;
-                const isDel   = isDeliveryCell(col, row);
+                const isPark        = PARK_COLS.includes(col) && PARK_ROWS.includes(row);
+                const isStore       = col === STORE_POS.col && row === STORE_POS.row;
+                const isHotel       = col === HOTEL_POS.col && row === HOTEL_POS.row;
+                const isDepot       = col === DEPOT_POS.col && row === DEPOT_POS.row;
+                const isForecourt   = col === DEPOT_FORECOURT_POS.col && row === DEPOT_FORECOURT_POS.row;
+                const isDel         = isDeliveryCell(col, row);
                 const key     = `${col},${row}`;
 
                 const pos = gridPos(col, row);
@@ -116,6 +118,9 @@ const World = (() => {
                     buildPark(scene, pos, col, row);
                     continue;
                 }
+
+                // Leave the depot forecourt empty so the truck spawn pad is unobstructed
+                if (isForecourt) continue;
 
                 if (isStore) {
                     specialBuildings[key] = buildStore(scene, pos);
@@ -300,19 +305,20 @@ const World = (() => {
         sign.material.diffuseTexture = signTex;
         sign.material.emissiveColor = new BABYLON.Color3(0.9, 0.9, 0.9);
 
-        // Truck park pad
+        // Truck park pad — far enough from the depot wall that the camera
+        // (which sits 13 units behind the truck) clears the building.
         const pad = BABYLON.MeshBuilder.CreateGround("depotPad", { width: 10, height: 14 }, scene);
-        pad.position.set(pos.x, 0.02, pos.z - d / 2 - 7);
+        pad.position.set(pos.x, 0.02, pos.z - d / 2 - 22);
         pad.material = mat(scene, COLOURS.truckPad);
 
-        // Trigger (manager talk zone)
+        // Trigger (return-to-depot zone)
         const trigger = BABYLON.MeshBuilder.CreateBox("depotTrigger", { width: 8, height: 3, depth: 6 }, scene);
         trigger.position.set(pos.x, 1.5, pos.z - d / 2 - 2);
         trigger.isVisible = false;
         trigger.isPickable = false;
         trigger.metadata = { type: "depotTrigger" };
 
-        return { type: "depot", bld, trigger, pos, padPos: new BABYLON.Vector3(pos.x, 0.4, pos.z - d / 2 - 7) };
+        return { type: "depot", bld, trigger, pos, padPos: new BABYLON.Vector3(pos.x, 0.4, pos.z - d / 2 - 22) };
     }
 
     // ── Windows helper ────────────────────────────────────────────────
