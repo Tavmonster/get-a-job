@@ -43,8 +43,9 @@
 
         // ── Minimap ─────────────────────────────────────────────────
         Minimap.init(scene, mainCamera);
-        const playerDot = Minimap.createDot(scene, "#4488ff", 3);
-        const truckDot  = Minimap.createDot(scene, "#ffaa00", 5);
+        const playerDot     = Minimap.createDot(scene, "#4488ff", 3);
+        const truckDot      = Minimap.createDot(scene, "#ffaa00", 5);
+        const objectiveDot  = Minimap.createObjectiveMarker(scene);
         truckDot.setEnabled(false);
 
         // ── Packages ────────────────────────────────────────────────
@@ -70,6 +71,8 @@
                     setTimeout(() => {
                         UI.showText("Wait — is that a HIRING sign?!", 3500);
                     }, 4500);
+                    // Point objective marker at the store
+                    if (storeData) Minimap.setObjective(objectiveDot, storeData.trigger.position);
                     break;
 
                 case GameState.STATES.INTERVIEW:
@@ -87,6 +90,8 @@
                 case GameState.STATES.HIRED:
                     Player.setEnabled(true);
                     UI.showText(`You got the job! You scored ${interviewScore}/5. Here are the truck keys — drive to the depot!`, 6000);
+                    // Point objective at depot / truck
+                    if (depotData) Minimap.setObjective(objectiveDot, depotData.trigger.position);
                     // Unlock truck
                     Truck.setVisible(true);
                     truckDot.setEnabled(true);
@@ -98,10 +103,13 @@
                 case GameState.STATES.DELIVERING:
                     Packages.activate();
                     UI.showText("Drive to each marked house and deliver the packages!", 4000);
+                    // Hide single objective — delivery markers on minimap serve as targets
+                    Minimap.setObjective(objectiveDot, null);
                     break;
 
                 case GameState.STATES.RETURN_DEPOT:
                     UI.showText("All packages delivered! Return the truck to the depot.", 5000);
+                    if (depotData) Minimap.setObjective(objectiveDot, depotData.trigger.position);
                     break;
 
                 case GameState.STATES.PAYDAY:
@@ -109,11 +117,13 @@
                     Truck.setDriving(false);
                     GameCamera.switchTarget(playerMesh);
                     UI.showText("Great work! Talk to the manager to get your paycheck.", 5000);
+                    if (depotData) Minimap.setObjective(objectiveDot, depotData.trigger.position);
                     paydayReady = true;
                     break;
 
                 case GameState.STATES.HOTEL:
                     UI.showText("Nice work today. Head to the hotel to rest.", 4000);
+                    if (hotelData) Minimap.setObjective(objectiveDot, hotelData.trigger.position);
                     break;
 
                 case GameState.STATES.GAME_OVER:
@@ -142,21 +152,21 @@
             const playerPos = Player.getPosition();
             const truckPos  = truckMesh ? truckMesh.position : BABYLON.Vector3.Zero();
 
-            // Camera alpha for player movement
-            const alpha = GameCamera.getAlpha();
+            // ── Camera ─────────────────────────────────────────
+            GameCamera.update();
 
-            // ── Walking states ───────────────────────────────────────
+            // ── Walking states ──────────────────────────────────────
             if (gs === S.WALK_TO_STORE || gs === S.PAYDAY || gs === S.HOTEL) {
-                Player.update(alpha);
+                Player.update();
             }
 
-            // ── Driving states ───────────────────────────────────────
+            // ── Driving states ──────────────────────────────────────
             if (gs === S.DELIVERING || gs === S.RETURN_DEPOT) {
                 if (Truck.isDrivingActive()) {
                     Truck.update();
                     Packages.checkDeliveries(truckPos);
                 } else {
-                    Player.update(alpha);
+                    Player.update();
                 }
             }
 

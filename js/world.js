@@ -163,6 +163,7 @@ const World = (() => {
                     }, scene);
                     marker.position.set(pos.x, 0.03, pos.z + (d / 2) + 3);
                     marker.material = mat(scene, COLOURS.deliveryMkr);
+                    marker.layerMask = 0x00000002; // visible on minimap only
                     marker.metadata = { type: "deliveryMarker", cell: { col, row } };
 
                     // Invisible trigger box

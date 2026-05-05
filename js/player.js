@@ -36,49 +36,29 @@ const Player = (() => {
         return mesh;
     }
 
-    function update(cameraAlpha) {
+    const TURN_SPEED = 0.04; // radians per frame
+
+    function update() {
         if (!mesh || !enabled) return;
 
-        let moveX = 0;
+        // ── Rotation (Left / Right arrows or A / D) ──────────────────
+        if (Input.isHeld("KeyA") || Input.isHeld("ArrowLeft"))  mesh.rotation.y -= TURN_SPEED;
+        if (Input.isHeld("KeyD") || Input.isHeld("ArrowRight")) mesh.rotation.y += TURN_SPEED;
+
+        // ── Forward / backward along character's own facing direction ─
         let moveZ = 0;
+        if (Input.isHeld("KeyW") || Input.isHeld("ArrowUp"))   moveZ =  1;
+        if (Input.isHeld("KeyS") || Input.isHeld("ArrowDown")) moveZ = -1;
 
-        if (Input.isHeld("KeyW") || Input.isHeld("ArrowUp"))    moveZ = 1;
-        if (Input.isHeld("KeyS") || Input.isHeld("ArrowDown"))  moveZ = -1;
-        if (Input.isHeld("KeyA") || Input.isHeld("ArrowLeft"))  moveX = -1;
-        if (Input.isHeld("KeyD") || Input.isHeld("ArrowRight")) moveX = 1;
+        const fx = Math.sin(mesh.rotation.y) * moveZ * SPEED;
+        const fz = Math.cos(mesh.rotation.y) * moveZ * SPEED;
 
-        if (moveX !== 0 || moveZ !== 0) {
-            // Move relative to camera facing direction
-            const angle = cameraAlpha + Math.PI;
-            const cosA = Math.cos(angle);
-            const sinA = Math.sin(angle);
-            const worldX = moveX * cosA + moveZ * sinA;
-            const worldZ = moveX * -sinA + moveZ * cosA;
+        velY += GRAVITY;
+        mesh.moveWithCollisions(new BABYLON.Vector3(fx, velY, fz));
 
-            const len = Math.sqrt(worldX * worldX + worldZ * worldZ);
-            const nx = (worldX / len) * SPEED;
-            const nz = (worldZ / len) * SPEED;
-
-            // Face direction of movement
-            mesh.rotation.y = Math.atan2(nx, nz);
-
-            velY += GRAVITY;
-            const delta = new BABYLON.Vector3(nx, velY, nz);
-            mesh.moveWithCollisions(delta);
-
-            // Reset velY when on ground
-            if (mesh.position.y < 1.05) {
-                mesh.position.y = 1.0;
-                velY = 0;
-            }
-        } else {
-            // Apply gravity even when standing still
-            velY += GRAVITY;
-            mesh.moveWithCollisions(new BABYLON.Vector3(0, velY, 0));
-            if (mesh.position.y < 1.05) {
-                mesh.position.y = 1.0;
-                velY = 0;
-            }
+        if (mesh.position.y < 1.05) {
+            mesh.position.y = 1.0;
+            velY = 0;
         }
     }
 

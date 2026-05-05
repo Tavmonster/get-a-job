@@ -1,56 +1,63 @@
 /**
- * camera.js — FollowCamera setup with mouse-drag rotation
+ * camera.js — Simple third-person camera that sits behind the target mesh.
+ * Uses a plain FreeCamera repositioned manually every frame.
  */
 const GameCamera = (() => {
-    let camera = null;
-    let canvas = null;
-    let isDragging = false;
-    let lastMouseX = 0;
-    let rotationY = 0;
+    let camera  = null;
+    let target  = null;
+
+    const RISE   = 5;    // height above target
+    const BEHIND = 12;   // distance behind target
 
     function init(scene, targetMesh, cvs) {
-        canvas = cvs;
+        cvs.addEventListener("contextmenu", (e) => e.preventDefault());
 
-        camera = new BABYLON.FollowCamera("followCam", new BABYLON.Vector3(0, 10, -20), scene);
-        camera.heightOffset     = 6;
-        camera.radius           = 14;
-        camera.rotationOffset   = 180;
-        camera.cameraAcceleration = 0.08;
-        camera.maxCameraSpeed   = 20;
-        camera.lockedTarget     = targetMesh;
-        camera.minZ             = 0.1;
+        // Start at a sensible position; we'll move it every frame
+        camera = new BABYLON.FreeCamera(
+            "cam",
+            new BABYLON.Vector3(0, RISE, -BEHIND),
+            scene
+        );
+        camera.minZ  = 0.1;
+        camera.maxZ  = 500;
+        camera.fov   = 1.1;   // ~63° — slightly wide
 
-        // Mouse-drag to rotate around the target
-        canvas.addEventListener("mousedown", (e) => {
-            if (e.button === 2) {
-                isDragging = true;
-                lastMouseX = e.clientX;
-            }
-        });
-        window.addEventListener("mouseup", () => { isDragging = false; });
-        window.addEventListener("mousemove", (e) => {
-            if (!isDragging) return;
-            const dx = e.clientX - lastMouseX;
-            lastMouseX = e.clientX;
-            camera.rotationOffset += dx * 0.5;
-        });
-
-        canvas.addEventListener("contextmenu", (e) => e.preventDefault());
-
+        target = targetMesh;
         return camera;
     }
 
-    function switchTarget(newTarget) {
-        if (camera) camera.lockedTarget = newTarget;
+    /**
+     * Call once per frame from the render loop.
+     * Positions the camera BEHIND+ABOVE the target and aims at the target.
+     */
+    function update() {
+        if (!camera || !target) return;
+
+        const rot = target.rotation.y;
+
+        // Unit vector pointing in the direction the target faces
+        const fwdX = Math.sin(rot);
+        const fwdZ = Math.cos(rot);
+
+        // Camera sits behind and above the target
+        camera.position.x = target.position.x - fwdX * BEHIND;
+        camera.position.y = target.position.y + RISE;
+        camera.position.z = target.position.z - fwdZ * BEHIND;
+
+        // Look at a point slightly above the target's feet
+        camera.setTarget(new BABYLON.Vector3(
+            target.position.x,
+            target.position.y + 1.2,
+            target.position.z
+        ));
     }
 
-    function getAlpha() {
-        if (!camera) return 0;
-        // Convert rotationOffset to radians relative to camera facing
-        return (camera.rotationOffset * Math.PI) / 180;
+    function switchTarget(newTarget) {
+        target = newTarget;
     }
 
     function getCamera() { return camera; }
 
-    return { init, switchTarget, getAlpha, getCamera };
+    return { init, update, switchTarget, getCamera };
 })();
+

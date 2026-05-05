@@ -58,5 +58,38 @@ const Minimap = (() => {
         dot.position.z = targetMesh.position.z;
     }
 
-    return { init, createDot, updateDot };
+    /**
+     * Create a bright objective star visible only on the minimap.
+     */
+    function createObjectiveMarker(scene) {
+        const star = BABYLON.MeshBuilder.CreateCylinder("objMarker", {
+            height: 0.5, diameter: 6, tessellation: 5,
+        }, scene);
+        const mat = new BABYLON.StandardMaterial("objMarkerMat", scene);
+        mat.diffuseColor  = new BABYLON.Color3(1, 1, 0);
+        mat.emissiveColor = new BABYLON.Color3(1, 1, 0);
+        star.material = mat;
+        star.layerMask = 0x00000002; // minimap only
+        star.isPickable = false;
+        star.setEnabled(false);
+        return star;
+    }
+
+    /**
+     * Move the objective marker to a world-space Vector3 position.
+     * Pass null to hide it.
+     */
+    function setObjective(marker, pos) {
+        if (!marker) return;
+        if (!pos) {
+            marker.setEnabled(false);
+            return;
+        }
+        marker.position.x = pos.x;
+        marker.position.y = 3;
+        marker.position.z = pos.z;
+        marker.setEnabled(true);
+    }
+
+    return { init, createDot, updateDot, createObjectiveMarker, setObjective };
 })();
