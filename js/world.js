@@ -27,6 +27,9 @@ const World = (() => {
         sandFloor:   "#e8c87a",
         sandWall:    "#a07840",
         stoneWall:   "#7a7870",
+        treeTrunk:   "#6b4423",
+        treeLeaves:  "#27ae60",
+        fountain:    "#95a5a6",
     };
 
     function mat(scene, hex, alpha) {
