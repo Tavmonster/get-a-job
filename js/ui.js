@@ -12,6 +12,9 @@ const UI = (() => {
 
     function init(scene) {
         advTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI", true, scene);
+        // Only render GUI on the main camera (layer 1), not the minimap camera (layer 3).
+        // This prevents the minimap viewport from intercepting pointer events on GUI buttons.
+        advTexture.layer.layerMask = 0x10000001;
 
         // ── Narrative centre text ──────────────────────────────────────
         narrativeBlock = new BABYLON.GUI.TextBlock("narrative");

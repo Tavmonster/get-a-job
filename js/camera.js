@@ -6,8 +6,8 @@ const GameCamera = (() => {
     let camera  = null;
     let target  = null;
 
-    const RISE   = 5;    // height above target
-    const BEHIND = 12;   // distance behind target
+    const RISE   = 11;   // height above target
+    const BEHIND = 13;   // distance behind target
 
     function init(scene, targetMesh, cvs) {
         cvs.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -44,10 +44,10 @@ const GameCamera = (() => {
         camera.position.y = target.position.y + RISE;
         camera.position.z = target.position.z - fwdZ * BEHIND;
 
-        // Look at a point slightly above the target's feet
+        // Look at a point at the target's chest height
         camera.setTarget(new BABYLON.Vector3(
             target.position.x,
-            target.position.y + 1.2,
+            target.position.y + 0.5,
             target.position.z
         ));
     }

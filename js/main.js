@@ -43,7 +43,7 @@
 
         // ── Minimap ─────────────────────────────────────────────────
         Minimap.init(scene, mainCamera);
-        const playerDot     = Minimap.createDot(scene, "#4488ff", 3);
+        const playerDot     = Minimap.createDot(scene, "#4488ff", 5);
         const truckDot      = Minimap.createDot(scene, "#ffaa00", 5);
         const objectiveDot  = Minimap.createObjectiveMarker(scene);
         truckDot.setEnabled(false);
