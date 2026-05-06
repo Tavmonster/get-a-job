@@ -518,6 +518,16 @@ const World = (() => {
         roof.position.set(pos.x, h + 0.4, pos.z);
         roof.material = mat(scene, COLOURS.roof);
 
+        // Building label
+        const storeLabel = BABYLON.MeshBuilder.CreatePlane("storeLabel", { width: 10, height: 2.5 }, scene);
+        storeLabel.position.set(pos.x, 4.5, pos.z - d / 2 - 0.05);
+        storeLabel.material = new BABYLON.StandardMaterial("storeLabelMat", scene);
+        const storeLabelTex = new BABYLON.DynamicTexture("storeLabelTex", { width: 512, height: 128 }, scene);
+        storeLabelTex.drawText("STORE", null, 96, "bold 88px Arial", "#333333", "#e8d5b0", true);
+        storeLabel.material.diffuseTexture = storeLabelTex;
+        storeLabel.material.emissiveColor = new BABYLON.Color3(0.9, 0.85, 0.7);
+        storeLabel.material.backFaceCulling = false;
+
         // Sign above door
         const sign = BABYLON.MeshBuilder.CreatePlane("hiringSign", { width: 4, height: 1.2 }, scene);
         sign.position.set(pos.x, h - 0.5, pos.z - d / 2 - 0.1);
@@ -548,14 +558,15 @@ const World = (() => {
         bld.material = mat(scene, COLOURS.hotel);
         bld.checkCollisions = true;
 
-        // Sign
-        const sign = BABYLON.MeshBuilder.CreatePlane("hotelSign", { width: 6, height: 1.5 }, scene);
-        sign.position.set(pos.x, h - 1, pos.z - d / 2 - 0.1);
+        // Building label
+        const sign = BABYLON.MeshBuilder.CreatePlane("hotelSign", { width: 12, height: 3 }, scene);
+        sign.position.set(pos.x, 8, pos.z - d / 2 - 0.1);
         const signTex = new BABYLON.DynamicTexture("hotelTex", { width: 512, height: 128 }, scene);
-        signTex.drawText("HOTEL", null, 100, "bold 90px Arial", "gold", "#003366", true);
+        signTex.drawText("HOTEL", null, 96, "bold 88px Arial", "gold", "#003366", true);
         sign.material = new BABYLON.StandardMaterial("hotelSignMat", scene);
         sign.material.diffuseTexture = signTex;
         sign.material.emissiveColor = new BABYLON.Color3(1, 0.85, 0);
+        sign.material.backFaceCulling = false;
 
         const trigger = BABYLON.MeshBuilder.CreateBox("hotelTrigger", { width: 6, height: 3, depth: 4 }, scene);
         trigger.position.set(pos.x, 1.5, pos.z - d / 2 - 2);
