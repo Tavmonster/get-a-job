@@ -5,12 +5,10 @@ const Truck = (() => {
     let mesh = null;
     let scene = null;
     let driving = false;
-    const MAX_SPEED   = 0.35;
-    const ACCEL       = 0.012;
-    const BRAKE       = 0.02;
-    const TURN_SPEED  = 0.04;
+    const MAX_SPEED  = 0.24;
+    const ACCEL      = 0.010;
+    const TURN_SPEED = 0.018;   // radians per frame at full speed
     let speed = 0;
-    let steeringAngle = 0;
 
     function init(babylonScene) {
         scene = babylonScene;
@@ -67,12 +65,12 @@ const Truck = (() => {
         collider.checkCollisions = true;
         collider.isPickable = false;
 
-        // Use a dummy box as the physics pivot
+        // Use a dummy point as the physics pivot
         const pivot = BABYLON.MeshBuilder.CreateBox("truckPivot", { size: 0.01 }, scene);
         pivot.material = new BABYLON.StandardMaterial("pivMat", scene);
         pivot.material.alpha = 0;
         pivot.isPickable = false;
-        pivot.checkCollisions = false;
+        pivot.checkCollisions = false;  // movement handled manually via raycast
         root.parent = pivot;
         root.position.y = 0;
 
@@ -81,6 +79,8 @@ const Truck = (() => {
         const spawnPos = World.getTruckSpawnPos();
         mesh.position.copyFrom(spawnPos);
         mesh.position.y = 0;
+        // Face south (away from the depot building which is to the north)
+        mesh.rotation.y = Math.PI;
 
         setVisible(false);
         return mesh;
@@ -89,36 +89,51 @@ const Truck = (() => {
     function update() {
         if (!mesh || !driving) return;
 
-        // Acceleration
+        // Acceleration / braking
         if (Input.isHeld("KeyW") || Input.isHeld("ArrowUp")) {
             speed = Math.min(speed + ACCEL, MAX_SPEED);
         } else if (Input.isHeld("KeyS") || Input.isHeld("ArrowDown")) {
-            speed = Math.max(speed - ACCEL * 1.5, -MAX_SPEED * 0.5);
+            speed = Math.max(speed - ACCEL * 1.5, -MAX_SPEED * 0.4);
         } else {
-            // Natural deceleration
             speed *= 0.96;
             if (Math.abs(speed) < 0.001) speed = 0;
         }
 
-        // Steering
-        if (Math.abs(speed) > 0.01) {
-            if (Input.isHeld("KeyA") || Input.isHeld("ArrowLeft"))       steeringAngle -= TURN_SPEED * Math.sign(speed);
-            else if (Input.isHeld("KeyD") || Input.isHeld("ArrowRight")) steeringAngle += TURN_SPEED * Math.sign(speed);
-            else steeringAngle *= 0.9;
+        // Steering: direct rotation scaled by speed so it's weaker at low speed
+        if (Math.abs(speed) > 0.005) {
+            const turnAmount = TURN_SPEED * (Math.abs(speed) / MAX_SPEED) * Math.sign(speed);
+            if (Input.isHeld("KeyA") || Input.isHeld("ArrowLeft"))       mesh.rotation.y -= turnAmount;
+            else if (Input.isHeld("KeyD") || Input.isHeld("ArrowRight")) mesh.rotation.y += turnAmount;
         }
 
-        mesh.rotation.y += steeringAngle * (Math.abs(speed) / MAX_SPEED);
+        if (Math.abs(speed) > 0.001) {
+            const forward = new BABYLON.Vector3(
+                Math.sin(mesh.rotation.y),
+                0,
+                Math.cos(mesh.rotation.y)
+            );
 
-        const forward = new BABYLON.Vector3(
-            Math.sin(mesh.rotation.y),
-            0,
-            Math.cos(mesh.rotation.y)
-        );
+            // Raycast forward — stop if a building is within 3 units
+            const rayOrigin = new BABYLON.Vector3(mesh.position.x, 1.5, mesh.position.z);
+            const ray = new BABYLON.Ray(rayOrigin, forward.scale(Math.sign(speed)), 3.2);
+            const hit = scene.pickWithRay(ray, (m) => {
+                return m.checkCollisions
+                    && m.name !== "truckPivot"
+                    && m.name !== "truckCollider"
+                    && !m.name.startsWith("wheel")
+                    && m.name !== "ground";
+            });
 
-        // Keep above ground
+            if (!hit || !hit.hit) {
+                mesh.position.x += forward.x * speed;
+                mesh.position.z += forward.z * speed;
+            } else {
+                speed = 0; // stop on impact
+            }
+        }
+
+        // Keep level with ground
         if (mesh.position.y < 0) mesh.position.y = 0;
-
-        mesh.position.addInPlace(forward.scale(speed));
     }
 
     function setDriving(val) {
