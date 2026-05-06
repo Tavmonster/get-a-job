@@ -63,6 +63,9 @@
         // ── NPCs ─────────────────────────────────────────────────────
         NPCSystem.init(scene);
 
+        // ── NPC Cars ─────────────────────────────────────────────────
+        NPCCars.init(scene);
+
         // ── References to key trigger zones ─────────────────────────
         const storeData  = World.getSpecialBuilding("store");
         const depotData  = World.getSpecialBuilding("depot");
@@ -169,6 +172,9 @@
 
             // ── NPCs ────────────────────────────────────────────
             NPCSystem.update();
+
+            // ── NPC Cars ─────────────────────────────────────────
+            NPCCars.update();
 
             // ── Walking states ──────────────────────────────────────
             if (gs === S.WALK_TO_STORE || gs === S.PAYDAY || gs === S.HOTEL) {
