@@ -42,14 +42,26 @@
         UI.init(scene);
 
         // ── Minimap ─────────────────────────────────────────────────
-        Minimap.init(scene, mainCamera);
+        // Minimap.init(scene, mainCamera);
         const playerDot     = Minimap.createDot(scene, "#4488ff", 5);
         const truckDot      = Minimap.createDot(scene, "#ffaa00", 5);
         const objectiveDot  = Minimap.createObjectiveMarker(scene);
         truckDot.setEnabled(false);
 
+        // Prevent Babylon GUI (text, HUD, hints) from rendering over the minimap.
+        // The GUI layer gets a dedicated bit (0x10000000); mainCamera opts in,
+        // minimapCamera keeps the default mask (0x0FFFFFFF) which excludes that bit.
+        const guiTexture = UI.getAdvTexture();
+        if (guiTexture && guiTexture.layer) {
+            guiTexture.layer.layerMask = 0x10000000;
+        }
+        mainCamera.layerMask = 0x0FFFFFFF | 0x10000000;
+
         // ── Packages ────────────────────────────────────────────────
         Packages.init(scene, onAllDelivered);
+
+        // ── NPCs ─────────────────────────────────────────────────────
+        NPCSystem.init(scene);
 
         // ── References to key trigger zones ─────────────────────────
         const storeData  = World.getSpecialBuilding("store");
@@ -116,8 +128,8 @@
                     Player.setEnabled(true);
                     Truck.setDriving(false);
                     GameCamera.switchTarget(playerMesh);
-                    UI.showText("Great work! Talk to the manager to get your paycheck.", 5000);
-                    if (depotData) Minimap.setObjective(objectiveDot, depotData.trigger.position);
+                    UI.showText("Great work! Go back to the store to collect your paycheck.", 5000);
+                    if (storeData) Minimap.setObjective(objectiveDot, storeData.trigger.position);
                     paydayReady = true;
                     break;
 
@@ -154,6 +166,9 @@
 
             // ── Camera ─────────────────────────────────────────
             GameCamera.update();
+
+            // ── NPCs ────────────────────────────────────────────
+            NPCSystem.update();
 
             // ── Walking states ──────────────────────────────────────
             if (gs === S.WALK_TO_STORE || gs === S.PAYDAY || gs === S.HOTEL) {
@@ -236,23 +251,28 @@
             }
 
             // Depot return trigger (after all delivered)
+            // Works whether the player is driving OR has exited the truck on foot.
             if (gs === S.RETURN_DEPOT && depotData) {
-                if (nearTrigger(truckPos, depotData.trigger, 14) && Truck.isDrivingActive()) {
-                    Truck.setDriving(false);
-                    Player.setEnabled(true);
-                    Player.teleport(new BABYLON.Vector3(truckPos.x + 3, 1, truckPos.z));
-                    GameCamera.switchTarget(playerMesh);
+                const checkPos = Truck.isDrivingActive() ? truckPos : playerPos;
+                const checkDist = Truck.isDrivingActive() ? 14 : 10;
+                if (nearTrigger(checkPos, depotData.trigger, checkDist)) {
+                    if (Truck.isDrivingActive()) {
+                        Truck.setDriving(false);
+                        Player.setEnabled(true);
+                        Player.teleport(new BABYLON.Vector3(truckPos.x + 3, 1, truckPos.z));
+                        GameCamera.switchTarget(playerMesh);
+                    }
                     UI.hideInteractHint();
                     interactHintActive = "";
                     GameState.set(S.PAYDAY);
                 }
             }
 
-            // Payday — talk to manager at depot
-            if (gs === S.PAYDAY && depotData && paydayReady) {
-                if (nearTrigger(playerPos, depotData.trigger, 10)) {
+            // Payday — collect paycheck at the store
+            if (gs === S.PAYDAY && storeData && paydayReady) {
+                if (nearTrigger(playerPos, storeData.trigger, 10)) {
                     if (interactHintActive !== "manager") {
-                        UI.showInteractHint("Press E to talk to the manager");
+                        UI.showInteractHint("Press E to collect your paycheck");
                         interactHintActive = "manager";
                     }
                     if (Input.consumePress("KeyE")) {
