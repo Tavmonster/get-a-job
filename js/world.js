@@ -112,6 +112,8 @@ const World = (() => {
             road.material = mat(scene, COLOURS.road);
         }
 
+        buildSidewalks(scene);
+
         // ── Buildings ─────────────────────────────────────────────────
         for (let col = 0; col < COLS; col++) {
             for (let row = 0; row < ROWS; row++) {
@@ -595,6 +597,83 @@ const World = (() => {
         trigger.metadata = { type: "depotTrigger" };
 
         return { type: "depot", bld, trigger, pos, padPos: new BABYLON.Vector3(pos.x, 0.4, pos.z - d / 2 - 22) };
+    }
+
+    // ── Sidewalks ─────────────────────────────────────────────────────────
+    function buildSidewalks(scene) {
+        // Per-block 2-unit-wide strips sitting between the road edge and the
+        // nearest building face.  Each segment is BLOCK-8=22 units long so it
+        // fits exactly between the ±4-unit vertical/horizontal crossing zones
+        // and never overlaps the roads or intersections.  Segments adjacent to
+        // park cells or the depot forecourt are omitted entirely.
+        const swMat = mat(scene, COLOURS.sidewalk);
+        const swW   = 2;            // width perpendicular to the road
+        const swLen = BLOCK - 8;    // = 22; fits between road-crossing zones
+        const swY   = 0.02;         // just above road surface (y = 0.01)
+
+        // Returns true for cells that should NOT get an adjacent sidewalk.
+        function noSidewalk(col, row) {
+            if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return true;
+            if (PARK_COLS.includes(col) && PARK_ROWS.includes(row)) return true;
+            if (col === DEPOT_FORECOURT_POS.col && row === DEPOT_FORECOURT_POS.row) return true;
+            return false;
+        }
+
+        // ── Horizontal roads ───────────────────────────────────────────
+        // Road `row` runs at z = OZ + (row - 0.5) * BLOCK.
+        // North side borders cell (col, row);  south side borders (col, row-1).
+        for (let row = 0; row <= ROWS; row++) {
+            const zRoad = OZ + (row - 0.5) * BLOCK;
+            for (let col = 0; col < COLS; col++) {
+                const xSeg = OX + col * BLOCK;
+
+                // North-side strip
+                if (!noSidewalk(col, row)) {
+                    const sw = BABYLON.MeshBuilder.CreateGround(
+                        "swHN_" + col + "_" + row,
+                        { width: swLen, height: swW }, scene);
+                    sw.position.set(xSeg, swY, zRoad + 4 + swW / 2);
+                    sw.material = swMat;
+                }
+
+                // South-side strip
+                if (!noSidewalk(col, row - 1)) {
+                    const sw = BABYLON.MeshBuilder.CreateGround(
+                        "swHS_" + col + "_" + row,
+                        { width: swLen, height: swW }, scene);
+                    sw.position.set(xSeg, swY, zRoad - 4 - swW / 2);
+                    sw.material = swMat;
+                }
+            }
+        }
+
+        // ── Vertical roads ─────────────────────────────────────────────
+        // Road `col` runs at x = OX + (col - 0.5) * BLOCK.
+        // East side borders cell (col, row);  west side borders (col-1, row).
+        for (let col = 0; col <= COLS; col++) {
+            const xRoad = OX + (col - 0.5) * BLOCK;
+            for (let row = 0; row < ROWS; row++) {
+                const zSeg = OZ + row * BLOCK;
+
+                // East-side strip
+                if (!noSidewalk(col, row)) {
+                    const sw = BABYLON.MeshBuilder.CreateGround(
+                        "swVE_" + col + "_" + row,
+                        { width: swW, height: swLen }, scene);
+                    sw.position.set(xRoad + 4 + swW / 2, swY, zSeg);
+                    sw.material = swMat;
+                }
+
+                // West-side strip
+                if (!noSidewalk(col - 1, row)) {
+                    const sw = BABYLON.MeshBuilder.CreateGround(
+                        "swVW_" + col + "_" + row,
+                        { width: swW, height: swLen }, scene);
+                    sw.position.set(xRoad - 4 - swW / 2, swY, zSeg);
+                    sw.material = swMat;
+                }
+            }
+        }
     }
 
     // ── Boundary walls ─────────────────────────────────────────────────
