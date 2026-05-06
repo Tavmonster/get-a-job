@@ -83,8 +83,8 @@ const World = (() => {
     function build(scene) {
         // ── Ground ────────────────────────────────────────────────────
         const ground = BABYLON.MeshBuilder.CreateGround("ground", {
-            width: COLS * BLOCK + 60,
-            height: ROWS * BLOCK + 60,
+            width: COLS * BLOCK + 300,
+            height: ROWS * BLOCK + 300,
         }, scene);
         ground.material = mat(scene, COLOURS.ground);
         ground.checkCollisions = true;
@@ -354,22 +354,22 @@ const World = (() => {
             post.position.set(pos.x + ox, frameH / 2, pos.z);
             post.material = mat(scene, metal);
 
-            // Short diagonal brace from the base outward for stability look
-            const braceLen = 2.2;
-            const braceAngle = Math.PI / 6;   // 30° from vertical
-            const brace = BABYLON.MeshBuilder.CreateCylinder(
-                "swBrace_" + ox,
-                { height: braceLen, diameter: 0.15, tessellation: 8 },
-                scene
-            );
-            const sign = ox < 0 ? -1 : 1;
-            brace.position.set(
-                pos.x + ox + sign * Math.sin(braceAngle) * braceLen / 2,
-                braceLen / 2 * Math.cos(braceAngle),
-                pos.z
-            );
-            brace.rotation.z = -sign * braceAngle;
-            brace.material = mat(scene, metal);
+            // // Short diagonal brace from the base outward for stability look
+            // const braceLen = 2.2;
+            // const braceAngle = Math.PI / 6;   // 30° from vertical
+            // const brace = BABYLON.MeshBuilder.CreateCylinder(
+            //     "swBrace_" + ox,
+            //     { height: braceLen, diameter: 0.15, tessellation: 8 },
+            //     scene
+            // );
+            // const sign = ox < 0 ? -1 : 1;
+            // brace.position.set(
+            //     pos.x + ox + sign * Math.sin(braceAngle) * braceLen / 2,
+            //     braceLen / 2 * Math.cos(braceAngle),
+            //     pos.z
+            // );
+            // brace.rotation.z = -sign * braceAngle;
+            // brace.material = mat(scene, metal);
         });
 
         // Top bar spanning between the two posts
@@ -691,18 +691,25 @@ const World = (() => {
     function buildBoundaryWalls(scene) {
         // Place walls just outside the outermost roads (road centres at ±105,
         // roads are 8 units wide so edges reach ±109; walls sit at ±120).
+        // Walls are tall (30 units) so the camera (y≈11) can never see over them,
+        // and thick (20 units) extending outward so the camera can't peek past
+        // the outer face even when the player stands with their back against the wall.
         const halfMap = (COLS * BLOCK) / 2 + 15;   // 105 + 15 = 120
-        const wallH   = 10;
-        const wallT   = 3;
+        const wallH   = 30;
+        // Keep inner face at ±118.5 (halfMap - 1.5); extend outward by 20 units.
+        // wallT=20, centre offset = wallT/2 - 1.5 = 8.5 outward from halfMap.
+        const wallT   = 20;
+        const wallOff = wallT / 2 - 1.5;  // 8.5 — shifts centre outward so inner face stays put
         const wallMat = mat(scene, COLOURS.stoneWall);
+        wallMat.backFaceCulling = false;  // visible from both sides so camera never sees through
 
         // N/S walls span the full width including corners (+wallT overhang)
         // E/W walls fit snugly between them
         const wallDefs = [
-            { name: "N", w: halfMap * 2 + wallT * 2, h: wallH, d: wallT, x: 0,        z:  halfMap },
-            { name: "S", w: halfMap * 2 + wallT * 2, h: wallH, d: wallT, x: 0,        z: -halfMap },
-            { name: "E", w: wallT, h: wallH, d: halfMap * 2,             x:  halfMap,  z: 0        },
-            { name: "W", w: wallT, h: wallH, d: halfMap * 2,             x: -halfMap,  z: 0        },
+            { name: "N", w: halfMap * 2 + wallT * 2, h: wallH, d: wallT, x: 0,              z:  halfMap + wallOff },
+            { name: "S", w: halfMap * 2 + wallT * 2, h: wallH, d: wallT, x: 0,              z: -halfMap - wallOff },
+            { name: "E", w: wallT, h: wallH, d: halfMap * 2,             x:  halfMap + wallOff, z: 0              },
+            { name: "W", w: wallT, h: wallH, d: halfMap * 2,             x: -halfMap - wallOff, z: 0              },
         ];
 
         for (const wd of wallDefs) {
@@ -712,6 +719,7 @@ const World = (() => {
             wall.position.set(wd.x, wd.h / 2, wd.z);
             wall.material = wallMat;
             wall.checkCollisions = true;
+            wall.alwaysSelectAsActiveMesh = true;  // prevent frustum culling when camera is inside/near the wall
         }
     }
 

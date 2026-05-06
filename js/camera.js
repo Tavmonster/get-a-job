@@ -6,8 +6,11 @@ const GameCamera = (() => {
     let camera  = null;
     let target  = null;
 
-    const RISE   = 11;   // height above target
-    const BEHIND = 13;   // distance behind target
+    const RISE      = 11;   // height above target
+    const BEHIND    = 13;   // distance behind target
+    // Inner face of boundary walls is at ±118.5 (halfMap=120 - 1.5).
+    // Clamp the camera to ±118 so it never enters the wall geometry.
+    const WALL_INNER = 118;
 
     function init(scene, targetMesh, cvs) {
         cvs.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -43,6 +46,10 @@ const GameCamera = (() => {
         camera.position.x = target.position.x - fwdX * BEHIND;
         camera.position.y = target.position.y + RISE;
         camera.position.z = target.position.z - fwdZ * BEHIND;
+
+        // Don't let the camera enter the boundary walls
+        camera.position.x = Math.max(-WALL_INNER, Math.min(WALL_INNER, camera.position.x));
+        camera.position.z = Math.max(-WALL_INNER, Math.min(WALL_INNER, camera.position.z));
 
         // Look at a point at the target's chest height
         camera.setTarget(new BABYLON.Vector3(
