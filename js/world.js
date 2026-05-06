@@ -46,14 +46,14 @@ const World = (() => {
     const ROWS  = 7;
     // Park: top-left quadrant (col 0-1, row 0-1)
     // Store: col 5, row 1
+    // Depot: col 6, row 1  (directly east of Store)
     // Hotel: col 5, row 5
-    // Depot: col 1, row 5
 
     const PARK_COLS  = [0, 1];
     const PARK_ROWS  = [0, 1];
     const STORE_POS  = { col: 5, row: 1 };
     const HOTEL_POS  = { col: 5, row: 5 };
-    const DEPOT_POS         = { col: 1, row: 5 };
+    const DEPOT_POS         = { col: 6, row: 1 };
     const DEPOT_FORECOURT_POS = { col: DEPOT_POS.col, row: DEPOT_POS.row - 1 };
 
     // World-space origin offset so the grid is centred
