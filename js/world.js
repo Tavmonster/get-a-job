@@ -210,45 +210,64 @@ const World = (() => {
         grass.position.set(pos.x, 0.02, pos.z);
         grass.material = mat(scene, COLOURS.parkGrass);
 
-        // All park features built once from the first cell
+        // All park features built once from the first cell.
+        // Roads run at half-BLOCK offsets (x=-75, z=-75 between these cells),
+        // so each cell centre is the safe anchor for its features.
         if (col !== 0 || row !== 0) return;
 
-        // Park centre: midpoint of the four park grid cells
-        // pos = gridPos(0,0), so centre is half a BLOCK toward (1,1)
-        const cx = pos.x + BLOCK / 2;
-        const cz = pos.z + BLOCK / 2;
+        // Each cell's world-space centre
+        const c00x = pos.x,          c00z = pos.z;           // (-90, -90)
+        const c10x = pos.x + BLOCK,  c10z = pos.z;           // (-60, -90)
+        const c01x = pos.x,          c01z = pos.z + BLOCK;   // (-90, -60)
+        const c11x = pos.x + BLOCK,  c11z = pos.z + BLOCK;   // (-60, -60)
 
-        addFountain(scene,     new BABYLON.Vector3(cx,      0, cz));
-        addBench(scene,        new BABYLON.Vector3(cx - 6,  0, cz - 2));
-        addBench(scene,        new BABYLON.Vector3(cx + 6,  0, cz - 2));
-        addSlide(scene,        new BABYLON.Vector3(cx - 7,  0, cz - 7));
-        addSwings(scene,       new BABYLON.Vector3(cx + 7,  0, cz - 7));
-        addSandbox(scene,      new BABYLON.Vector3(cx,      0, cz + 7));
-        addPicnicTable(scene,  new BABYLON.Vector3(cx + 5,  0, cz + 6));
-        addTree(scene,         new BABYLON.Vector3(cx - 8,  0, cz - 8));
-        addTree(scene,         new BABYLON.Vector3(cx + 8,  0, cz - 8));
-        addTree(scene,         new BABYLON.Vector3(cx - 8,  0, cz + 8));
-        addTree(scene,         new BABYLON.Vector3(cx + 8,  0, cz + 8));
-        addTree(scene,         new BABYLON.Vector3(cx,      0, cz - 9));
+        // Cell (0,0) — player spawns at z-3; bench backrest faces south toward player
+        addBench(scene,       new BABYLON.Vector3(c00x,     0, c00z), true);
+        addFountain(scene,    new BABYLON.Vector3(c00x + 7, 0, c00z + 7));
+
+        // Cell (1,0) — slide (poles at centre, ramp extends south into cell)
+        addSlide(scene,       new BABYLON.Vector3(c10x,     0, c10z - 3));
+
+        // Cell (0,1) — swings
+        addSwings(scene,      new BABYLON.Vector3(c01x,     0, c01z));
+
+        // Cell (1,1) — sandbox and picnic table
+        addSandbox(scene,     new BABYLON.Vector3(c11x - 3, 0, c11z));
+        addPicnicTable(scene, new BABYLON.Vector3(c11x + 5, 0, c11z + 6));
+
+        // Trees — outer corners and mid-edges of each cell, well clear of equipment
+        addTree(scene, new BABYLON.Vector3(c00x - 10, 0, c00z - 10)); // SW park corner
+        // tree at (c00x, c00z-10) removed — was directly behind the spawn bench
+        addTree(scene, new BABYLON.Vector3(c00x - 10, 0, c00z));      // W of cell (0,0)
+        addTree(scene, new BABYLON.Vector3(c10x,      0, c10z - 10)); // S of cell (1,0)
+        addTree(scene, new BABYLON.Vector3(c10x + 10, 0, c10z - 10)); // SE park corner
+        addTree(scene, new BABYLON.Vector3(c01x - 10, 0, c01z + 10)); // NW park corner
+        addTree(scene, new BABYLON.Vector3(c01x,      0, c01z + 10)); // N of cell (0,1)
+        addTree(scene, new BABYLON.Vector3(c11x,      0, c11z + 10)); // N of cell (1,1)
+        addTree(scene, new BABYLON.Vector3(c11x + 10, 0, c11z + 10)); // NE park corner
+        addTree(scene, new BABYLON.Vector3(c11x + 10, 0, c11z));      // E of cell (1,1)
     }
 
-    function addBench(scene, pos) {
+    // flip=true puts the backrest on the -z side (toward the player spawn at z-3)
+    function addBench(scene, pos, flip = false) {
+        const id = Math.round(pos.x) + "_" + Math.round(pos.z);
+        const dz = flip ? -1 : 1;
         // Seat
-        const seat = BABYLON.MeshBuilder.CreateBox("benchSeat", { width: 3.5, height: 0.3, depth: 1 }, scene);
+        const seat = BABYLON.MeshBuilder.CreateBox("benchSeat_" + id, { width: 3.5, height: 0.3, depth: 1 }, scene);
         seat.position.set(pos.x, 0.6, pos.z);
         seat.material = mat(scene, COLOURS.bench);
 
         // Legs (4)
-        const legPositions = [[-1.5, -0.15], [1.5, -0.15], [-1.5, 0.15], [1.5, 0.15]];
+        const legPositions = [[-1.5, -0.15 * dz], [1.5, -0.15 * dz], [-1.5, 0.15 * dz], [1.5, 0.15 * dz]];
         legPositions.forEach(([lx, lz], i) => {
-            const leg = BABYLON.MeshBuilder.CreateBox("benchLeg" + i, { width: 0.2, height: 0.6, depth: 0.2 }, scene);
+            const leg = BABYLON.MeshBuilder.CreateBox("benchLeg_" + id + "_" + i, { width: 0.2, height: 0.6, depth: 0.2 }, scene);
             leg.position.set(pos.x + lx, 0.3, pos.z + lz);
             leg.material = mat(scene, COLOURS.bench);
         });
 
         // Backrest
-        const back = BABYLON.MeshBuilder.CreateBox("benchBack", { width: 3.5, height: 0.8, depth: 0.15 }, scene);
-        back.position.set(pos.x, 1.1, pos.z + 0.45);
+        const back = BABYLON.MeshBuilder.CreateBox("benchBack_" + id, { width: 3.5, height: 0.8, depth: 0.15 }, scene);
+        back.position.set(pos.x, 1.1, pos.z + 0.45 * dz);
         back.material = mat(scene, COLOURS.bench);
     }
 
@@ -317,39 +336,68 @@ const World = (() => {
 
     // ── Swings ────────────────────────────────────────────────────────
     function addSwings(scene, pos) {
-        const frameH  = 4.5;
-        const barHalf = 3.5;   // half-length of top bar
-        const legSpan = 1.2;   // z foot-spread of each A-frame
-        const metal   = COLOURS.swingFrame;
+        const frameH   = 5.0;
+        const postX    = 4.0;    // posts at x ± 4 (swings at -2,0,+2 leave room on each side)
+        const chainLen = 3.0;
+        const cSpread  = 0.38;   // half-gap between the two chains on a swing
+        const metal    = COLOURS.swingFrame;
 
-        // Two A-frame ends (one at each end of the bar)
-        [-barHalf, barHalf].forEach(ox => {
-            [-legSpan, legSpan].forEach(dz => {
-                const legLen = Math.sqrt(frameH * frameH + dz * dz);
-                const leg = BABYLON.MeshBuilder.CreateCylinder("swingLeg_" + ox + "_" + dz, { height: legLen, diameter: 0.2 }, scene);
-                // Midpoint between apex (pos.x+ox, frameH, pos.z) and foot (pos.x+ox, 0, pos.z+dz)
-                leg.position.set(pos.x + ox, frameH / 2, pos.z + dz / 2);
-                leg.rotation.x = Math.atan2(dz, frameH);
-                leg.material = mat(scene, metal);
-            });
+        // Two straight vertical posts
+        [-postX, postX].forEach(ox => {
+            const post = BABYLON.MeshBuilder.CreateCylinder(
+                "swPost_" + ox,
+                { height: frameH, diameter: 0.30, tessellation: 8 },
+                scene
+            );
+            post.position.set(pos.x + ox, frameH / 2, pos.z);
+            post.material = mat(scene, metal);
+
+            // Short diagonal brace from the base outward for stability look
+            const braceLen = 2.2;
+            const braceAngle = Math.PI / 6;   // 30° from vertical
+            const brace = BABYLON.MeshBuilder.CreateCylinder(
+                "swBrace_" + ox,
+                { height: braceLen, diameter: 0.15, tessellation: 8 },
+                scene
+            );
+            const sign = ox < 0 ? -1 : 1;
+            brace.position.set(
+                pos.x + ox + sign * Math.sin(braceAngle) * braceLen / 2,
+                braceLen / 2 * Math.cos(braceAngle),
+                pos.z
+            );
+            brace.rotation.z = -sign * braceAngle;
+            brace.material = mat(scene, metal);
         });
 
-        // Top bar
-        const bar = BABYLON.MeshBuilder.CreateCylinder("swingBar", { height: barHalf * 2, diameter: 0.18 }, scene);
+        // Top bar spanning between the two posts
+        const bar = BABYLON.MeshBuilder.CreateCylinder(
+            "swBar",
+            { height: postX * 2, diameter: 0.22, tessellation: 8 },
+            scene
+        );
         bar.rotation.z = Math.PI / 2;
         bar.position.set(pos.x, frameH, pos.z);
         bar.material = mat(scene, metal);
 
-        // Three swings — each with two chains (front/back of seat)
+        // Three swings: two parallel vertical chains + a flat seat
         [-2.0, 0.0, 2.0].forEach(ox => {
-            const chainLen = 3.0;
-            [-0.18, 0.18].forEach(dz => {
-                const chain = BABYLON.MeshBuilder.CreateCylinder("chain_" + ox + "_" + dz, { height: chainLen, diameter: 0.06 }, scene);
-                chain.position.set(pos.x + ox, frameH - chainLen / 2, pos.z + dz);
+            [-cSpread, cSpread].forEach(dx => {
+                const chain = BABYLON.MeshBuilder.CreateCylinder(
+                    "swChain_" + ox + "_" + dx,
+                    { height: chainLen, diameter: 0.07, tessellation: 6 },
+                    scene
+                );
+                chain.position.set(pos.x + ox + dx, frameH - chainLen / 2, pos.z);
                 chain.material = mat(scene, metal);
             });
-            const seat = BABYLON.MeshBuilder.CreateBox("swingSeat_" + ox, { width: 1.1, height: 0.14, depth: 0.45 }, scene);
-            seat.position.set(pos.x + ox, frameH - chainLen - 0.07, pos.z);
+
+            const seat = BABYLON.MeshBuilder.CreateBox(
+                "swSeat_" + ox,
+                { width: 1.1, height: 0.12, depth: 0.44 },
+                scene
+            );
+            seat.position.set(pos.x + ox, frameH - chainLen - 0.06, pos.z);
             seat.material = mat(scene, COLOURS.swingSeat);
         });
     }
