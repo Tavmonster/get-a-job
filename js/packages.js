@@ -6,6 +6,7 @@ const Packages = (() => {
     let remaining = 0;
     let scene = null;
     let onAllDelivered = null;
+    let delivBoxMat = null;
 
     function init(babylonScene, allDeliveredCallback) {
         scene = babylonScene;
@@ -46,6 +47,21 @@ const Packages = (() => {
                 made = true;
                 UI.showHUD(remaining, deliveryPoints.length);
                 UI.showText(`Package delivered! (${deliveryPoints.length - remaining} / ${deliveryPoints.length})`);
+
+                // Spawn a cardboard box prop in front of the house
+                if (!delivBoxMat) {
+                    delivBoxMat = new BABYLON.StandardMaterial("delivBoxMat", scene);
+                    delivBoxMat.diffuseColor = new BABYLON.Color3(0.76, 0.60, 0.42);
+                }
+                const boxH = 0.65;
+                const cell = dp.trigger.metadata.cell;
+                const dBox = BABYLON.MeshBuilder.CreateBox(`deliveredBox_${cell.col}_${cell.row}`, {
+                    width: 0.8, height: boxH, depth: 0.8,
+                }, scene);
+                dBox.position.set(dp.trigger.position.x, boxH / 2 + 0.02, dp.trigger.position.z);
+                dBox.material = delivBoxMat;
+                dBox.checkCollisions = false;
+                dBox.isPickable = false;
 
                 if (remaining <= 0) {
                     setTimeout(() => {
