@@ -112,19 +112,43 @@ const Truck = (() => {
                 0,
                 Math.cos(mesh.rotation.y)
             );
+            const right = new BABYLON.Vector3(
+                Math.cos(mesh.rotation.y),
+                0,
+                -Math.sin(mesh.rotation.y)
+            );
 
-            // Raycast forward — stop if a building is within 3 units
-            const rayOrigin = new BABYLON.Vector3(mesh.position.x, 1.5, mesh.position.z);
-            const ray = new BABYLON.Ray(rayOrigin, forward.scale(Math.sign(speed)), 3.2);
-            const hit = scene.pickWithRay(ray, (m) => {
-                return m.checkCollisions
-                    && m.name !== "truckPivot"
-                    && m.name !== "truckCollider"
-                    && !m.name.startsWith("wheel")
-                    && m.name !== "ground";
+            // Cast three rays from the leading face of the truck (left corner,
+            // centre, right corner) so that side edges can't clip through walls.
+            // leadZ: front face is +4.5, rear face is -5.5 from pivot centre.
+            const dir      = Math.sign(speed);
+            const leadZ    = dir > 0 ? 4.5 : -5.5;
+            const halfW    = 1.6;   // slightly inside half-width to avoid grazing
+            const rayLen   = Math.abs(speed) + 0.4;
+            const rayDir   = forward.scale(dir);
+
+            const base        = new BABYLON.Vector3(mesh.position.x, 1.5, mesh.position.z);
+            const leadCenter  = base.add(forward.scale(leadZ));
+            const rayOrigins  = [
+                leadCenter,
+                leadCenter.add(right.scale( halfW)),
+                leadCenter.add(right.scale(-halfW)),
+            ];
+
+            const collisionFilter = (m) =>
+                m.checkCollisions
+                && m.name !== "truckPivot"
+                && m.name !== "truckCollider"
+                && !m.name.startsWith("wheel")
+                && m.name !== "ground";
+
+            const blocked = rayOrigins.some(origin => {
+                const ray = new BABYLON.Ray(origin, rayDir, rayLen);
+                const hit = scene.pickWithRay(ray, collisionFilter);
+                return hit && hit.hit;
             });
 
-            if (!hit || !hit.hit) {
+            if (!blocked) {
                 mesh.position.x += forward.x * speed;
                 mesh.position.z += forward.z * speed;
             } else {
