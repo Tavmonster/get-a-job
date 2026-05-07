@@ -9,6 +9,11 @@ const Player = (() => {
     let velY = 0;
     let enabled = true;
 
+    // Walking animation state
+    let walkTime = 0;
+    let legPivotL = null, legPivotR = null;
+    let armPivotL = null, armPivotR = null;
+
     function init(babylonScene) {
         scene = babylonScene;
 
@@ -35,27 +40,35 @@ const Player = (() => {
         rootMat.alpha = 0;
         body.material = rootMat;
 
-        // ── Left leg / shoe ───────────────────────────────────────────
+        // ── Left leg / shoe (pivot at hip) ───────────────────────────
+        legPivotL = new BABYLON.TransformNode("legPivotL", scene);
+        legPivotL.position.set(-0.145, -0.19, 0);
+        legPivotL.parent = body;
+
         const legL = BABYLON.MeshBuilder.CreateCylinder("legL", { height: 0.58, diameter: 0.22, tessellation: 8 }, scene);
         legL.material = mkMat("legMatL", ...SUIT);
-        legL.position.set(-0.145, -0.48, 0);
-        legL.parent = body;
+        legL.position.set(0, -0.29, 0);
+        legL.parent = legPivotL;
 
         const shoeL = BABYLON.MeshBuilder.CreateBox("shoeL", { width: 0.20, height: 0.09, depth: 0.30 }, scene);
         shoeL.material = mkMat("shoeMatL", ...SHOE);
-        shoeL.position.set(-0.145, -0.79, 0.04);
-        shoeL.parent = body;
+        shoeL.position.set(0, -0.60, 0.04);
+        shoeL.parent = legPivotL;
 
-        // ── Right leg / shoe ──────────────────────────────────────────
+        // ── Right leg / shoe (pivot at hip) ───────────────────────────
+        legPivotR = new BABYLON.TransformNode("legPivotR", scene);
+        legPivotR.position.set(0.145, -0.19, 0);
+        legPivotR.parent = body;
+
         const legR = BABYLON.MeshBuilder.CreateCylinder("legR", { height: 0.58, diameter: 0.22, tessellation: 8 }, scene);
         legR.material = mkMat("legMatR", ...SUIT);
-        legR.position.set(0.145, -0.48, 0);
-        legR.parent = body;
+        legR.position.set(0, -0.29, 0);
+        legR.parent = legPivotR;
 
         const shoeR = BABYLON.MeshBuilder.CreateBox("shoeR", { width: 0.20, height: 0.09, depth: 0.30 }, scene);
         shoeR.material = mkMat("shoeMatR", ...SHOE);
-        shoeR.position.set(0.145, -0.79, 0.04);
-        shoeR.parent = body;
+        shoeR.position.set(0, -0.60, 0.04);
+        shoeR.parent = legPivotR;
 
         // ── Torso / suit jacket ───────────────────────────────────────
         const torso = BABYLON.MeshBuilder.CreateBox("torso", { width: 0.55, height: 0.60, depth: 0.30 }, scene);
@@ -75,29 +88,37 @@ const Player = (() => {
         tie.position.set(0, 0.04, 0.168);
         tie.parent = body;
 
-        // ── Left arm / hand ───────────────────────────────────────────
+        // ── Left arm / hand (pivot at shoulder) ──────────────────────
+        armPivotL = new BABYLON.TransformNode("armPivotL", scene);
+        armPivotL.position.set(-0.305, 0.41, 0);
+        armPivotL.rotation.z = -0.15;  // outward splay
+        armPivotL.parent = body;
+
         const armL = BABYLON.MeshBuilder.CreateCylinder("armL", { height: 0.52, diameter: 0.17, tessellation: 8 }, scene);
         armL.material = mkMat("armMatL", ...SUIT);
-        armL.rotation.z = -0.15;  // splay outward (top toward -X)
-        armL.position.set(-0.305, 0.15, 0);
-        armL.parent = body;
+        armL.position.set(0, -0.26, 0);
+        armL.parent = armPivotL;
 
         const handL = BABYLON.MeshBuilder.CreateSphere("handL", { diameter: 0.16, segments: 5 }, scene);
         handL.material = mkMat("handMatL", ...SKIN);
-        handL.position.set(-0.345, -0.13, 0);
-        handL.parent = body;
+        handL.position.set(-0.04, -0.54, 0);
+        handL.parent = armPivotL;
 
-        // ── Right arm / hand ──────────────────────────────────────────
+        // ── Right arm / hand (pivot at shoulder) ─────────────────────
+        armPivotR = new BABYLON.TransformNode("armPivotR", scene);
+        armPivotR.position.set(0.305, 0.41, 0);
+        armPivotR.rotation.z = 0.15;   // outward splay
+        armPivotR.parent = body;
+
         const armR = BABYLON.MeshBuilder.CreateCylinder("armR", { height: 0.52, diameter: 0.17, tessellation: 8 }, scene);
         armR.material = mkMat("armMatR", ...SUIT);
-        armR.rotation.z = 0.15;   // splay outward (top toward +X)
-        armR.position.set(0.305, 0.15, 0);
-        armR.parent = body;
+        armR.position.set(0, -0.26, 0);
+        armR.parent = armPivotR;
 
         const handR = BABYLON.MeshBuilder.CreateSphere("handR", { diameter: 0.16, segments: 5 }, scene);
         handR.material = mkMat("handMatR", ...SKIN);
-        handR.position.set(0.345, -0.13, 0);
-        handR.parent = body;
+        handR.position.set(0.04, -0.54, 0);
+        handR.parent = armPivotR;
 
         // ── Neck ──────────────────────────────────────────────────────
         const neck = BABYLON.MeshBuilder.CreateCylinder("neck", { height: 0.14, diameter: 0.19, tessellation: 8 }, scene);
@@ -176,6 +197,28 @@ const Player = (() => {
         if (mesh.position.y < 1.05) {
             mesh.position.y = 1.0;
             velY = 0;
+        }
+
+        // ── Walking animation ─────────────────────────────────────────
+        const isWalking = moveZ !== 0;
+        if (isWalking) {
+            walkTime += 0.15;
+            const legSwing = Math.sin(walkTime) * 0.45;
+            legPivotL.rotation.x =  legSwing;
+            legPivotR.rotation.x = -legSwing;
+            // Arms swing opposite to legs (right arm forward with left leg)
+            armPivotL.rotation.x = -legSwing * 0.5;
+            armPivotR.rotation.x =  legSwing * 0.5;
+        } else {
+            // Smoothly return limbs to rest (idle) position
+            legPivotL.rotation.x *= 0.8;
+            legPivotR.rotation.x *= 0.8;
+            armPivotL.rotation.x *= 0.8;
+            armPivotR.rotation.x *= 0.8;
+            if (Math.abs(legPivotL.rotation.x) < 0.005) legPivotL.rotation.x = 0;
+            if (Math.abs(legPivotR.rotation.x) < 0.005) legPivotR.rotation.x = 0;
+            if (Math.abs(armPivotL.rotation.x) < 0.005) armPivotL.rotation.x = 0;
+            if (Math.abs(armPivotR.rotation.x) < 0.005) armPivotR.rotation.x = 0;
         }
     }
 
