@@ -50,6 +50,7 @@
         // ── Minimap ─────────────────────────────────────────────────
         Minimap.init(scene, mainCamera);        const playerDot = Minimap.createDot(scene, "#4488ff", 9);
         const truckDot  = Minimap.createDot(scene, "#ffaa00", 9);
+        const policeDot = Minimap.createDot(scene, "#ff2222", 11);
         // Prevent Babylon GUI (text, HUD, hints) from rendering over the minimap.
         // The GUI layer gets a dedicated bit (0x10000000); mainCamera opts in,
         // minimapCamera keeps the default mask (0x0FFFFFFF) which excludes that bit.
@@ -67,7 +68,8 @@
 
         // ── NPC Cars ─────────────────────────────────────────────────
         NPCCars.init(scene);
-
+        // ── Police Car ───────────────────────────────────────
+        PoliceCar.init(scene);
         // ── Block material dirty checks ──────────────────────────────
         // All materials are fully initialized by now. Blocking the dirty
         // mechanism stops Babylon scanning every material every frame.
@@ -81,7 +83,9 @@
 
         // ── State flags ─────────────────────────────────────────────
         let interactHintActive = "";
-        let paydayReady = false;        let interviewScore = 0;
+        let paydayReady = false;
+        let policeAlerted = false;
+        let interviewScore = 0;
         // ── Game state machine ───────────────────────────────────────
         GameState.on((newState, prev) => {
             switch (newState) {
@@ -91,10 +95,6 @@
 
                 case GameState.STATES.WALK_TO_STORE:
                     UI.showMission("Find a Job");
-                    UI.showText("I need to get a job...", 4000);
-                    setTimeout(() => {
-                        UI.showText("Wait — is that a HIRING sign?!", 3500);
-                    }, 4500);
                     // Point objective marker at the store
                     if (storeData) Minimap.setObjective(storeData.trigger.position);
                     break;
@@ -172,11 +172,24 @@
                         });
                     }, 800);
                     break;
+
+                case GameState.STATES.JAILED:
+                    UI.showMission("BUSTED!");
+                    Truck.setDriving(false);
+                    Player.setEnabled(false);
+                    setTimeout(() => {
+                        UI.showEndScreen(false, () => location.reload(), 'jailed');
+                    }, 600);
+                    break;
             }
         });
 
-        // ── Intro cutscene ────────────────────────────────────────────
-        Cutscene.play('intro', () => {
+        // ── Intro cutscene (in-engine) ────────────────────────────────────
+        // Bench is 5 units north of spawn (bench seat top is at y≈0.75).
+        const _spawnPos = World.getPlayerSpawnPos();
+        const _benchPos = new BABYLON.Vector3(_spawnPos.x, 0.75, _spawnPos.z - 5);
+        Cutscene.playIntroCutscene(scene, playerMesh, GameCamera.getCamera(), _benchPos, () => {
+            Player.teleport(World.getPlayerSpawnPos());
             GameState.set(GameState.STATES.WALK_TO_STORE);
         });
 
@@ -340,17 +353,28 @@
                 else _showDebugPanel();
             }
 
-            // ── Camera ─────────────────────────────────────────
-            GameCamera.update();
-
             // ── NPCs ────────────────────────────────────────────
             NPCSystem.update();
 
             // ── NPC Cars ─────────────────────────────────────────
             NPCCars.update();
+            // ── Police Car ───────────────────────────────────────
+            PoliceCar.update();
 
-            // Suspend player movement and all interaction input during cutscenes
+            // Pedestrian hit: alert police when truck drives into an NPC
+            if (Truck.isDrivingActive() && !policeAlerted) {
+                if (NPCSystem.checkTruckHit(truckPos.x, truckPos.z, 4.0)) {
+                    policeAlerted = true;
+                    PoliceCar.alert();
+                    UI.showText("You hit a pedestrian! POLICE ARE COMING!", 5000);
+                }
+            }
+            // Suspend all gameplay (including camera) during cutscenes.
+            // playIntroCutscene drives the camera via its own observer.
             if (Cutscene.isActive()) return;
+
+            // ── Camera ─────────────────────────────────────────
+            GameCamera.update();
 
             // ── Walking states ──────────────────────────────────────
             if (gs === S.WALK_TO_STORE || gs === S.PAYDAY || gs === S.FAST_FOOD || gs === S.HOTEL) {
@@ -369,8 +393,7 @@
 
             // ── Minimap dots ─────────────────────────────────────────
             Minimap.updateDot(playerDot, Player.getMesh());
-            Minimap.updateDot(truckDot, truckMesh);
-
+            Minimap.updateDot(truckDot, truckMesh);            Minimap.updateDot(policeDot, PoliceCar.getPivot());
             // ── Interaction hints & triggers ─────────────────────────
 
             // Store entrance
@@ -383,9 +406,11 @@
                     if (Input.consumePress("KeyE")) {
                         UI.hideInteractHint();
                         interactHintActive = "";
-                        Cutscene.play('interview', () => {
-                            GameState.set(S.INTERVIEW);
-                        });
+                        Cutscene.playInterviewCutscene(
+                            scene, playerMesh, GameCamera.getCamera(),
+                            storeData,
+                            () => { GameState.set(S.INTERVIEW); }
+                        );
                     }
                 } else {
                     if (interactHintActive === "store") {

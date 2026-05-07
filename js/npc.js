@@ -236,5 +236,20 @@ const NPCSystem = (() => {
         }
     }
 
-    return { init, update };
+    /**
+     * Returns true if any NPC root position is within `radius` world units
+     * of the given (tx, tz) position.  Used by the truck for pedestrian-hit
+     * detection each frame.
+     */
+    function checkTruckHit(tx, tz, radius) {
+        const r2 = radius * radius;
+        for (const npc of npcs) {
+            const dx = npc.root.position.x - tx;
+            const dz = npc.root.position.z - tz;
+            if (dx * dx + dz * dz < r2) return true;
+        }
+        return false;
+    }
+
+    return { init, update, checkTruckHit };
 })();

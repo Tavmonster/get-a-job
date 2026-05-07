@@ -25,6 +25,7 @@ const GameState = (() => {
         FAST_FOOD:     "FAST_FOOD",
         HOTEL:         "HOTEL",
         GAME_OVER:     "GAME_OVER",
+        JAILED:        "JAILED",
     };
 
     let current = STATES.INTRO;

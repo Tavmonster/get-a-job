@@ -151,8 +151,8 @@ const UI = (() => {
         hudText.alpha = 0;
     }
 
-    // ── Full-screen overlay (game over / win) ─────────────────────────
-    function showEndScreen(win, onRestart) {
+    // ── Full-screen overlay (game over / win / jailed) ──────────────────
+    function showEndScreen(win, onRestart, reason) {
         if (!advTexture) return;
 
         // Dim background
@@ -170,7 +170,9 @@ const UI = (() => {
         bg.addControl(stack);
 
         const title = new BABYLON.GUI.TextBlock("endTitle");
-        title.text = win ? "🎉 You Got The Job And Finished Your First Day!" : "GAME OVER";
+        title.text = win ? "🎉 You Got The Job And Finished Your First Day!"
+            : reason === 'jailed' ? "BUSTED!"
+            : "GAME OVER";
         title.color = "white";
         title.fontSize = 42;
         title.fontFamily = "Arial";
@@ -181,6 +183,8 @@ const UI = (() => {
         const sub = new BABYLON.GUI.TextBlock("endSub");
         sub.text = win
             ? "You rented a room at the hotel. Get some rest — tomorrow is another day."
+            : reason === 'jailed'
+            ? "You hit a pedestrian and were arrested. You've been taken to jail. Game over!"
             : "You didn't get the job. Better luck next time!";
         sub.color = "#dddddd";
         sub.fontSize = 22;
