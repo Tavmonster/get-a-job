@@ -42,7 +42,7 @@
         UI.init(scene);
 
         // ── Minimap ─────────────────────────────────────────────────
-        // Minimap.init(scene, mainCamera);
+        Minimap.init(scene, mainCamera);
         const playerDot     = Minimap.createDot(scene, "#4488ff", 5);
         const truckDot      = Minimap.createDot(scene, "#ffaa00", 5);
         const objectiveDot  = Minimap.createObjectiveMarker(scene);
@@ -82,6 +82,7 @@
                     break;
 
                 case GameState.STATES.WALK_TO_STORE:
+                    UI.showMission("Find a Job");
                     UI.showText("I need to get a job...", 4000);
                     setTimeout(() => {
                         UI.showText("Wait — is that a HIRING sign?!", 3500);
@@ -91,6 +92,7 @@
                     break;
 
                 case GameState.STATES.INTERVIEW:
+                    UI.showMission("Job Interview");
                     UI.hideInteractHint();
                     Interview.start((passed, score, total) => {
                         interviewScore = score;
@@ -103,6 +105,7 @@
                     break;
 
                 case GameState.STATES.HIRED:
+                    UI.showMission("Drive to the Depot");
                     Player.setEnabled(true);
                     UI.showText(`You got the job! You scored ${interviewScore}/5. Here are the truck keys — drive to the depot!`, 6000);
                     // Point objective at depot / truck
@@ -116,6 +119,7 @@
                     break;
 
                 case GameState.STATES.DELIVERING:
+                    UI.showMission("Deliver Packages");
                     Packages.activate();
                     UI.showText("Drive to each marked house and deliver the packages!", 4000);
                     // Hide single objective — delivery markers on minimap serve as targets
@@ -123,11 +127,13 @@
                     break;
 
                 case GameState.STATES.RETURN_DEPOT:
+                    UI.showMission("Return to Depot");
                     UI.showText("All packages delivered! Return the truck to the depot.", 5000);
                     if (depotData) Minimap.setObjective(objectiveDot, depotData.trigger.position);
                     break;
 
                 case GameState.STATES.PAYDAY:
+                    UI.showMission("Collect Paycheck");
                     Player.setEnabled(true);
                     Truck.setDriving(false);
                     GameCamera.switchTarget(playerMesh);
@@ -137,11 +143,13 @@
                     break;
 
                 case GameState.STATES.HOTEL:
+                    UI.showMission("Rest at Hotel");
                     UI.showText("Nice work today. Head to the hotel to rest.", 4000);
                     if (hotelData) Minimap.setObjective(objectiveDot, hotelData.trigger.position);
                     break;
 
                 case GameState.STATES.GAME_OVER:
+                    UI.showMission("");
                     Player.setEnabled(false);
                     Player.teleport(World.getPlayerSpawnPos());
                     setTimeout(() => UI.showEndScreen(false, () => location.reload()), 800);

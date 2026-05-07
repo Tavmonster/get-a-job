@@ -7,6 +7,7 @@ const UI = (() => {
     let narrativeBlock = null;
     let interactHint = null;
     let hudText = null;
+    let missionText = null;
     let fadeTimeout = null;
 
     function init(scene) {
@@ -41,19 +42,39 @@ const UI = (() => {
         interactHint.alpha = 0;
         advTexture.addControl(interactHint);
 
-        // ── HUD (top-left) ────────────────────────────────────────────
+        // ── Mission name (top-left, row 1) ──────────────────────────────
+        missionText = new BABYLON.GUI.TextBlock("mission");
+        missionText.text = "";
+        missionText.color = "#FFD700";
+        missionText.fontSize = 26;
+        missionText.fontFamily = "Arial";
+        missionText.fontStyle = "bold";
+        missionText.outlineWidth = 2;
+        missionText.outlineColor = "black";
+        missionText.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+        missionText.textVerticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
+        missionText.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
+        missionText.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+        missionText.height = "36px";
+        missionText.left = "16px";
+        missionText.top = "8px";
+        advTexture.addControl(missionText);
+
+        // ── HUD (top-left, row 2) ────────────────────────────────────────
         hudText = new BABYLON.GUI.TextBlock("hud");
         hudText.text = "";
         hudText.color = "white";
-        hudText.fontSize = 20;
+        hudText.fontSize = 18;
         hudText.fontFamily = "Arial";
         hudText.outlineWidth = 2;
         hudText.outlineColor = "black";
         hudText.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+        hudText.textVerticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
         hudText.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
         hudText.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+        hudText.height = "28px";
         hudText.left = "16px";
-        hudText.top = "16px";
+        hudText.top = "48px";
         hudText.alpha = 0;
         advTexture.addControl(hudText);
     }
@@ -85,6 +106,12 @@ const UI = (() => {
     function hideInteractHint() {
         if (!interactHint) return;
         interactHint.alpha = 0;
+    }
+
+    // ── Mission name ──────────────────────────────────────────────────
+    function showMission(name) {
+        if (!missionText) return;
+        missionText.text = name ? `Mission: ${name}` : "";
     }
 
     // ── HUD ───────────────────────────────────────────────────────────
@@ -158,7 +185,7 @@ const UI = (() => {
         let score = 0;
         const PASS_THRESHOLD = 3;
 
-        // if (typeof Minimap !== 'undefined') Minimap.hide();
+        if (typeof Minimap !== 'undefined') Minimap.hide();
 
         const overlay = document.createElement('div');
         overlay.style.cssText = [
@@ -179,7 +206,7 @@ const UI = (() => {
         function loadQuestion() {
             if (questionIndex >= questions.length) {
                 document.body.removeChild(overlay);
-                // if (typeof Minimap !== 'undefined') Minimap.show();
+                if (typeof Minimap !== 'undefined') Minimap.show();
                 onComplete(score >= PASS_THRESHOLD, score, questions.length);
                 return;
             }
@@ -249,6 +276,7 @@ const UI = (() => {
         showText,
         showInteractHint,
         hideInteractHint,
+        showMission,
         showHUD,
         hideHUD,
         showEndScreen,
