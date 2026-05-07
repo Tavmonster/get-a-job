@@ -288,6 +288,7 @@
                         paydayReady = false;
                         UI.hideInteractHint();
                         interactHintActive = "";
+                        UI.setMoney(100);
                         UI.showText("Manager: 'You did great today! Here is your first paycheck — $100!'", 5000);
                         setTimeout(() => {
                             UI.showText("Now go find a hotel and get some rest.", 4000);
@@ -313,6 +314,7 @@
                         Player.setEnabled(false);
                         UI.hideInteractHint();
                         interactHintActive = "";
+                        UI.setMoney(40);
                         UI.showText("You pay $60 for a room and get some well-deserved rest. $40 left over.", 5000);
                         setTimeout(() => UI.showEndScreen(true, () => location.reload()), 5500);
                     }

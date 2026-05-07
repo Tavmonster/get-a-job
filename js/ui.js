@@ -8,6 +8,7 @@ const UI = (() => {
     let interactHint = null;
     let hudText = null;
     let missionText = null;
+    let moneyText = null;
     let fadeTimeout = null;
 
     function init(scene) {
@@ -77,6 +78,30 @@ const UI = (() => {
         hudText.top = "48px";
         hudText.alpha = 0;
         advTexture.addControl(hudText);
+
+        // ── Money (top-right) ─────────────────────────────────────────
+        moneyText = new BABYLON.GUI.TextBlock("moneyText");
+        moneyText.text = "$0";
+        moneyText.color = "#00FF88";
+        moneyText.fontSize = 22;
+        moneyText.fontFamily = "Arial";
+        moneyText.fontStyle = "bold";
+        moneyText.outlineWidth = 2;
+        moneyText.outlineColor = "black";
+        moneyText.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT;
+        moneyText.textVerticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
+        moneyText.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
+        moneyText.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT;
+        moneyText.height = "36px";
+        moneyText.left = "-16px";
+        moneyText.top = "8px";
+        advTexture.addControl(moneyText);
+    }
+
+    // ── Money HUD ─────────────────────────────────────────────────────
+    function setMoney(amount) {
+        if (!moneyText) return;
+        moneyText.text = `$${amount}`;
     }
 
     // ── Show fading narrative text ────────────────────────────────────
@@ -281,5 +306,6 @@ const UI = (() => {
         hideHUD,
         showEndScreen,
         showInterviewPanel,
+        setMoney,
     };
 })();
