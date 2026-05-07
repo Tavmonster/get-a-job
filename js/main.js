@@ -42,12 +42,8 @@
         UI.init(scene);
 
         // ── Minimap ─────────────────────────────────────────────────
-        Minimap.init(scene, mainCamera);
-        const playerDot     = Minimap.createDot(scene, "#4488ff", 5);
-        const truckDot      = Minimap.createDot(scene, "#ffaa00", 5);
-        const objectiveDot  = Minimap.createObjectiveMarker(scene);
-        truckDot.setEnabled(false);
-
+        Minimap.init(scene, mainCamera);        const playerDot = Minimap.createDot(scene, "#4488ff", 9);
+        const truckDot  = Minimap.createDot(scene, "#ffaa00", 9);
         // Prevent Babylon GUI (text, HUD, hints) from rendering over the minimap.
         // The GUI layer gets a dedicated bit (0x10000000); mainCamera opts in,
         // minimapCamera keeps the default mask (0x0FFFFFFF) which excludes that bit.
@@ -88,7 +84,7 @@
                         UI.showText("Wait — is that a HIRING sign?!", 3500);
                     }, 4500);
                     // Point objective marker at the store
-                    if (storeData) Minimap.setObjective(objectiveDot, storeData.trigger.position);
+                    if (storeData) Minimap.setObjective(storeData.trigger.position);
                     break;
 
                 case GameState.STATES.INTERVIEW:
@@ -109,10 +105,9 @@
                     Player.setEnabled(true);
                     UI.showText(`You got the job! You scored ${interviewScore}/5. Here are the truck keys — drive to the depot!`, 6000);
                     // Point objective at depot / truck
-                    if (depotData) Minimap.setObjective(objectiveDot, depotData.trigger.position);
+                    if (depotData) Minimap.setObjective(depotData.trigger.position);
                     // Unlock truck
                     Truck.setVisible(true);
-                    truckDot.setEnabled(true);
                     setTimeout(() => {
                         GameState.set(GameState.STATES.DELIVERING);
                     }, 1500);
@@ -123,13 +118,13 @@
                     Packages.activate();
                     UI.showText("Drive to each marked house and deliver the packages!", 4000);
                     // Hide single objective — delivery markers on minimap serve as targets
-                    Minimap.setObjective(objectiveDot, null);
+                    Minimap.setObjective(null);
                     break;
 
                 case GameState.STATES.RETURN_DEPOT:
                     UI.showMission("Return to Depot");
                     UI.showText("All packages delivered! Return the truck to the depot.", 5000);
-                    if (depotData) Minimap.setObjective(objectiveDot, depotData.trigger.position);
+                    if (depotData) Minimap.setObjective(depotData.trigger.position);
                     break;
 
                 case GameState.STATES.PAYDAY:
@@ -138,14 +133,14 @@
                     Truck.setDriving(false);
                     GameCamera.switchTarget(playerMesh);
                     UI.showText("Great work! Go back to the store to collect your paycheck.", 5000);
-                    if (storeData) Minimap.setObjective(objectiveDot, storeData.trigger.position);
+                    if (storeData) Minimap.setObjective(storeData.trigger.position);
                     paydayReady = true;
                     break;
 
                 case GameState.STATES.HOTEL:
                     UI.showMission("Rest at Hotel");
                     UI.showText("Nice work today. Head to the hotel to rest.", 4000);
-                    if (hotelData) Minimap.setObjective(objectiveDot, hotelData.trigger.position);
+                    if (hotelData) Minimap.setObjective(hotelData.trigger.position);
                     break;
 
                 case GameState.STATES.GAME_OVER:
@@ -200,8 +195,8 @@
             }
 
             // ── Minimap dots ─────────────────────────────────────────
-            Minimap.updateDot(playerDot, playerMesh);
-            if (truckMesh) Minimap.updateDot(truckDot, truckMesh);
+            Minimap.updateDot(playerDot, Player.getMesh());
+            Minimap.updateDot(truckDot, truckMesh);
 
             // ── Interaction hints & triggers ─────────────────────────
 

@@ -8,8 +8,10 @@ const Minimap = (() => {
     let minimapCamera = null;
     let _scene = null;
     let _mainCamera = null;
+    let _objMarker = null;   // yellow blinking waypoint pentagon
+    let _objActive = false;
 
-    const ORTHO = 100;
+    const ORTHO = 115;
 
     function init(scene, mainCamera) {
         _scene = scene;
@@ -31,10 +33,47 @@ const Minimap = (() => {
         // Bottom-right corner viewport (22% wide, 28% tall)
         minimapCamera.viewport = new BABYLON.Viewport(0.78, 0.0, 0.22, 0.28);
 
+        // Layer 0x20000000 is used exclusively for minimap dots/markers so
+        // they are invisible to the main camera (layerMask 0x0FFFFFFF).
+        minimapCamera.layerMask = 0x2FFFFFFF;
+
         scene.activeCameras = [mainCamera, minimapCamera];
 
         // Route pointer events through the main camera's coordinate space.
         scene.cameraToUseForPointers = mainCamera;
+
+        // Disable fog for the minimap camera by pushing fog range far out of view,
+        // then restoring it. Avoids shader recompilation that toggling fogEnabled causes.
+        let _fogStart, _fogEnd;
+        scene.onBeforeCameraRenderObservable.add((cam) => {
+            if (cam !== minimapCamera) return;
+            _fogStart = scene.fogStart; _fogEnd = scene.fogEnd;
+            scene.fogStart = 1e9; scene.fogEnd = 1e9;
+        });
+        scene.onAfterCameraRenderObservable.add((cam) => {
+            if (cam !== minimapCamera) return;
+            scene.fogStart = _fogStart; scene.fogEnd = _fogEnd;
+        });
+
+        // ── Objective marker (yellow pentagon, minimap-only) ─────────
+        _objMarker = BABYLON.MeshBuilder.CreateCylinder("objMarker", {
+            height: 0.3, diameter: 14, tessellation: 24,
+        }, scene);
+        const om = new BABYLON.StandardMaterial("objMarkerMat", scene);
+        om.diffuseColor    = new BABYLON.Color3(1, 1, 0);
+        om.emissiveColor   = new BABYLON.Color3(1, 1, 0);
+        om.disableLighting = true;
+        _objMarker.material   = om;
+        _objMarker.isPickable = false;
+        _objMarker.layerMask  = 0x20000000;
+        _objMarker.setEnabled(false);
+
+        // Blink the marker: visible 400 ms, hidden 150 ms → very noticeable.
+        scene.registerBeforeRender(() => {
+            if (!_objMarker || !_objActive) return;
+            const t = Date.now() % 550;
+            _objMarker.setEnabled(t < 400);
+        });
 
         return minimapCamera;
     }
@@ -50,6 +89,7 @@ const Minimap = (() => {
         m.disableLighting = true;
         dot.material   = m;
         dot.isPickable = false;
+        dot.layerMask  = 0x20000000;
         return dot;
     }
 
@@ -60,27 +100,17 @@ const Minimap = (() => {
         dot.position.z = targetMesh.position.z;
     }
 
-    function createObjectiveMarker(scene) {
-        const star = BABYLON.MeshBuilder.CreateCylinder("objMarker", {
-            height: 0.3, diameter: 7, tessellation: 5,
-        }, scene);
-        const m = new BABYLON.StandardMaterial("objMarkerMat", scene);
-        m.diffuseColor    = new BABYLON.Color3(1, 1, 0);
-        m.emissiveColor   = new BABYLON.Color3(1, 1, 0);
-        m.disableLighting = true;
-        star.material   = m;
-        star.isPickable = false;
-        star.setEnabled(false);
-        return star;
-    }
-
-    function setObjective(marker, pos) {
-        if (!marker) return;
-        if (!pos) { marker.setEnabled(false); return; }
-        marker.position.x = pos.x;
-        marker.position.y = 0.5;
-        marker.position.z = pos.z;
-        marker.setEnabled(true);
+    function setObjective(pos) {
+        if (!_objMarker) return;
+        if (!pos) {
+            _objActive = false;
+            _objMarker.setEnabled(false);
+            return;
+        }
+        _objMarker.position.x = pos.x;
+        _objMarker.position.y = 0.5;
+        _objMarker.position.z = pos.z;
+        _objActive = true;
     }
 
     function hide() {
@@ -93,5 +123,5 @@ const Minimap = (() => {
         _scene.activeCameras = [_mainCamera, minimapCamera];
     }
 
-    return { init, createDot, updateDot, createObjectiveMarker, setObjective, hide, show };
+    return { init, createDot, updateDot, setObjective, hide, show };
 })();
