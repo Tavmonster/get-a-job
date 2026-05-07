@@ -20,6 +20,7 @@ const NPCCars = (() => {
     const LOOK_AHEAD     = 9.0;    // avoidance ray length (units)
     const STOP_DIST      = 3.5;    // full-stop distance (units)
     const CAR_HALF_W     = 0.9;    // lateral offset of side avoidance rays
+    const HIT_DIST       = 2.6;    // distance from car pivot that counts as a player hit
 
     // ── Clockwise rectangular loop routes ────────────────────────────
     // Waypoints are [x, z] corners at road intersections, offset 2 units
@@ -274,6 +275,13 @@ const NPCCars = (() => {
             pos.x += fwd.x * mv;
             pos.z += fwd.z * mv;
             pos.y  = 0;
+            // ── Player knockback ──────────────────────────────────────────
+            const playerPos = Player.getPosition();
+            const pdx = playerPos.x - pos.x;
+            const pdz = playerPos.z - pos.z;
+            if (pdx * pdx + pdz * pdz < HIT_DIST * HIT_DIST) {
+                Player.applyKnockback(pdx, pdz);
+            }
         }
     }
 

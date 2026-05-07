@@ -171,11 +171,32 @@ const World = (() => {
                 roof.material = mat(scene, COLOURS.roof);
                 roof.checkCollisions = false;
 
-                // Windows
+                // Windows (left/west face already; right/east face added inside addWindows)
                 addWindows(scene, pos, w, h, d, colIdx);
 
-                // Delivery house: add a coloured marker on the ground
+                // Door on south face — skip for delivery houses (they get a north door instead)
+                if (!isDel) {
+                    const doorH = 3.5;
+                    const door = BABYLON.MeshBuilder.CreateBox("door_" + key, {
+                        width: 2.0, height: doorH, depth: 0.15,
+                    }, scene);
+                    door.position.set(pos.x, doorH / 2, pos.z - d / 2 - 0.08);
+                    door.material = mat(scene, COLOURS.door);
+                }
+
+                // Delivery house: door on north face, marker and trigger in front of it
                 if (isDel) {
+                    // Visible door on the north-facing wall
+                    const doorH = 3.5;
+                    const door = BABYLON.MeshBuilder.CreateBox("door_" + key, {
+                        width: 2.0, height: doorH, depth: 0.15,
+                    }, scene);
+                    door.position.set(pos.x, doorH / 2, pos.z + d / 2 + 0.08);
+                    door.material = mat(scene, COLOURS.door);
+
+                    // Doorstep position — where the delivered package will be placed
+                    const doorStepPos = new BABYLON.Vector3(pos.x, 0, pos.z + d / 2 + 0.9);
+
                     const marker = BABYLON.MeshBuilder.CreateGround("marker_" + key, {
                         width: 6, height: 6,
                     }, scene);
@@ -193,7 +214,7 @@ const World = (() => {
                     trigger.isPickable = false;
                     trigger.metadata = { type: "deliveryTrigger", cell: { col, row }, marker };
 
-                    specialBuildings[key] = { type: "delivery", trigger, marker, pos };
+                    specialBuildings[key] = { type: "delivery", trigger, marker, pos, doorStepPos };
                 }
             }
         }
@@ -731,14 +752,45 @@ const World = (() => {
         const perWall = 2;
         for (let f = 0; f < floors; f++) {
             for (let i = 0; i < perWall; i++) {
-                const win = BABYLON.MeshBuilder.CreatePlane("win_" + colIdx + f + i, { width: 1.2, height: 1 }, scene);
-                win.position.set(
+                // Left / west face
+                const winL = BABYLON.MeshBuilder.CreatePlane("winL_" + colIdx + f + i, { width: 1.2, height: 1 }, scene);
+                winL.position.set(
                     pos.x + (-w / 2 - 0.02),
                     1.5 + f * 3,
                     pos.z + (i - 0.5) * (d / 3)
                 );
-                win.rotation.y = Math.PI / 2;
-                win.material = winMat;
+                winL.rotation.y = Math.PI / 2;
+                winL.material = winMat;
+
+                // Right / east face (mirrored)
+                const winR = BABYLON.MeshBuilder.CreatePlane("winR_" + colIdx + f + i, { width: 1.2, height: 1 }, scene);
+                winR.position.set(
+                    pos.x + (w / 2 + 0.02),
+                    1.5 + f * 3,
+                    pos.z + (i - 0.5) * (d / 3)
+                );
+                winR.rotation.y = -Math.PI / 2;
+                winR.material = winMat;
+
+                // Front / south face
+                const winS = BABYLON.MeshBuilder.CreatePlane("winS_" + colIdx + f + i, { width: 1.2, height: 1 }, scene);
+                winS.position.set(
+                    pos.x + (i - 0.5) * (w / 3),
+                    1.5 + f * 3,
+                    pos.z + (-d / 2 - 0.02)
+                );
+                winS.rotation.y = 0;
+                winS.material = winMat;
+
+                // Back / north face
+                const winN = BABYLON.MeshBuilder.CreatePlane("winN_" + colIdx + f + i, { width: 1.2, height: 1 }, scene);
+                winN.position.set(
+                    pos.x + (i - 0.5) * (w / 3),
+                    1.5 + f * 3,
+                    pos.z + (d / 2 + 0.02)
+                );
+                winN.rotation.y = Math.PI;
+                winN.material = winMat;
             }
         }
     }
@@ -764,8 +816,9 @@ const World = (() => {
     }
 
     function getPlayerSpawnPos() {
-        const p = gridPos(0, 0);
-        return new BABYLON.Vector3(p.x, 1, p.z - 3);
+        // TEMP: spawn in front of the store
+        const p = gridPos(STORE_POS.col, STORE_POS.row);
+        return new BABYLON.Vector3(p.x, 1, p.z - 14);
     }
 
     function getTruckSpawnPos() {

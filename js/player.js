@@ -131,6 +131,22 @@ const Player = (() => {
 
     const TURN_SPEED = 0.04; // radians per frame
 
+    // ── Knockback state ───────────────────────────────────────────────
+    let knockbackVelX = 0;
+    let knockbackVelZ = 0;
+    const KNOCKBACK_FORCE = 0.5;   // initial speed applied on hit
+    const KNOCKBACK_DECAY = 0.88;  // per-frame velocity decay
+    const KNOCKBACK_MIN   = 0.005; // velocity magnitude below which we zero out
+
+    function applyKnockback(dirX, dirZ) {
+        // Don't re-trigger while the player is already being knocked back
+        if (knockbackVelX * knockbackVelX + knockbackVelZ * knockbackVelZ > 0.01) return;
+        const len = Math.sqrt(dirX * dirX + dirZ * dirZ);
+        if (len < 0.001) return;
+        knockbackVelX = (dirX / len) * KNOCKBACK_FORCE;
+        knockbackVelZ = (dirZ / len) * KNOCKBACK_FORCE;
+    }
+
     function update() {
         if (!mesh || !enabled) return;
 
@@ -147,7 +163,15 @@ const Player = (() => {
         const fz = Math.cos(mesh.rotation.y) * moveZ * SPEED;
 
         velY += GRAVITY;
-        mesh.moveWithCollisions(new BABYLON.Vector3(fx, velY, fz));
+        mesh.moveWithCollisions(new BABYLON.Vector3(fx + knockbackVelX, velY, fz + knockbackVelZ));
+
+        // Decay knockback each frame
+        knockbackVelX *= KNOCKBACK_DECAY;
+        knockbackVelZ *= KNOCKBACK_DECAY;
+        if (Math.abs(knockbackVelX) < KNOCKBACK_MIN && Math.abs(knockbackVelZ) < KNOCKBACK_MIN) {
+            knockbackVelX = 0;
+            knockbackVelZ = 0;
+        }
 
         if (mesh.position.y < 1.05) {
             mesh.position.y = 1.0;
@@ -170,5 +194,5 @@ const Player = (() => {
         if (mesh) mesh.position.copyFrom(pos);
     }
 
-    return { init, update, setEnabled, getMesh, getPosition, teleport };
+    return { init, update, setEnabled, getMesh, getPosition, teleport, applyKnockback };
 })();

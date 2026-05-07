@@ -58,7 +58,9 @@ const Packages = (() => {
                 const dBox = BABYLON.MeshBuilder.CreateBox(`deliveredBox_${cell.col}_${cell.row}`, {
                     width: 0.8, height: boxH, depth: 0.8,
                 }, scene);
-                dBox.position.set(dp.trigger.position.x, boxH / 2 + 0.02, dp.trigger.position.z);
+                // Place at the doorstep if available, otherwise fall back to trigger position
+                const boxBasePos = dp.doorStepPos || dp.trigger.position;
+                dBox.position.set(boxBasePos.x, boxH / 2 + 0.02, boxBasePos.z);
                 dBox.material = delivBoxMat;
                 dBox.checkCollisions = false;
                 dBox.isPickable = false;

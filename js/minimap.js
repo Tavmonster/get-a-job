@@ -6,10 +6,14 @@
  */
 const Minimap = (() => {
     let minimapCamera = null;
+    let _scene = null;
+    let _mainCamera = null;
 
     const ORTHO = 100;
 
     function init(scene, mainCamera) {
+        _scene = scene;
+        _mainCamera = mainCamera;
         minimapCamera = new BABYLON.FreeCamera(
             "minimapCam",
             new BABYLON.Vector3(0, 150, 0.001),
@@ -29,19 +33,8 @@ const Minimap = (() => {
 
         scene.activeCameras = [mainCamera, minimapCamera];
 
-        // Force ALL pointer/click events to use the main camera's coordinate
-        // space so GUI controls respond across the full screen.
-        // After each frame Babylon.js sets scene.activeCamera to the last entry
-        // in activeCameras (minimapCamera), which causes GUI hit-testing to use
-        // the minimap viewport — making buttons only clickable inside the minimap
-        // area.  We fix this two ways:
-        //   1. scene.cameraToUseForPointers (respected by newer Babylon.js builds)
-        //   2. onAfterRenderObservable reset (fallback for older CDN builds that
-        //      ignore cameraToUseForPointers in GUI picking)
+        // Route pointer events through the main camera's coordinate space.
         scene.cameraToUseForPointers = mainCamera;
-        scene.onAfterRenderObservable.add(() => {
-            scene.activeCamera = mainCamera;
-        });
 
         return minimapCamera;
     }
@@ -90,5 +83,15 @@ const Minimap = (() => {
         marker.setEnabled(true);
     }
 
-    return { init, createDot, updateDot, createObjectiveMarker, setObjective };
+    function hide() {
+        if (!_scene || !minimapCamera) return;
+        _scene.activeCameras = [_mainCamera];
+    }
+
+    function show() {
+        if (!_scene || !minimapCamera) return;
+        _scene.activeCameras = [_mainCamera, minimapCamera];
+    }
+
+    return { init, createDot, updateDot, createObjectiveMarker, setObjective, hide, show };
 })();

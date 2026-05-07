@@ -8,13 +8,9 @@ const UI = (() => {
     let interactHint = null;
     let hudText = null;
     let fadeTimeout = null;
-    let interviewPanel = null;
 
     function init(scene) {
         advTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI", true, scene);
-        // Only render GUI on the main camera (layer 1), not the minimap camera (layer 3).
-        // This prevents the minimap viewport from intercepting pointer events on GUI buttons.
-        advTexture.layer.layerMask = 0x10000001;
 
         // ── Narrative centre text ──────────────────────────────────────
         narrativeBlock = new BABYLON.GUI.TextBlock("narrative");
@@ -156,129 +152,91 @@ const UI = (() => {
         stack.addControl(btn);
     }
 
-    // ── Interview panel ───────────────────────────────────────────────
+    // ── Interview panel (DOM overlay — sidesteps Babylon camera viewport issues) ──
     function showInterviewPanel(questions, onComplete) {
-        if (!advTexture) return;
-
         let questionIndex = 0;
         let score = 0;
         const PASS_THRESHOLD = 3;
 
-        // Dim overlay
-        const bg = new BABYLON.GUI.Rectangle("intBg");
-        bg.background = "rgba(0,0,0,0.82)";
-        bg.thickness = 0;
-        bg.width = "100%";
-        bg.height = "100%";
-        advTexture.addControl(bg);
-        interviewPanel = bg;
+        // if (typeof Minimap !== 'undefined') Minimap.hide();
 
-        const card = new BABYLON.GUI.Rectangle("intCard");
-        card.background = "#1a1a2e";
-        card.thickness = 2;
-        card.color = "#4a90e2";
-        card.cornerRadius = 12;
-        card.width = "680px";
-        card.height = "480px";
-        card.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_CENTER;
-        card.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
-        bg.addControl(card);
+        const overlay = document.createElement('div');
+        overlay.style.cssText = [
+            'position:fixed;top:0;left:0;width:100%;height:100%',
+            'background:rgba(0,0,0,0.82)',
+            'display:flex;align-items:center;justify-content:center',
+            'z-index:100;font-family:Arial,sans-serif',
+        ].join(';');
 
-        const stack = new BABYLON.GUI.StackPanel("intStack");
-        stack.width = "620px";
-        stack.paddingTop = "20px";
-        card.addControl(stack);
-
-        // Header
-        const header = new BABYLON.GUI.TextBlock("intHeader");
-        header.text = "Job Interview — Delivery Driver";
-        header.color = "#4a90e2";
-        header.fontSize = 22;
-        header.fontFamily = "Arial";
-        header.height = "40px";
-        stack.addControl(header);
-
-        // Progress
-        const progress = new BABYLON.GUI.TextBlock("intProgress");
-        progress.color = "#aaaaaa";
-        progress.fontSize = 16;
-        progress.fontFamily = "Arial";
-        progress.height = "28px";
-        stack.addControl(progress);
-
-        // Question text
-        const qText = new BABYLON.GUI.TextBlock("intQ");
-        qText.color = "white";
-        qText.fontSize = 20;
-        qText.fontFamily = "Arial";
-        qText.textWrapping = true;
-        qText.height = "80px";
-        qText.paddingTop = "10px";
-        stack.addControl(qText);
-
-        // Answer buttons container
-        const btnStack = new BABYLON.GUI.StackPanel("intBtnStack");
-        btnStack.width = "620px";
-        btnStack.paddingTop = "10px";
-        stack.addControl(btnStack);
-
-        // Feedback
-        const feedback = new BABYLON.GUI.TextBlock("intFeedback");
-        feedback.color = "#FFD700";
-        feedback.fontSize = 18;
-        feedback.fontFamily = "Arial";
-        feedback.height = "36px";
-        feedback.text = "";
-        stack.addControl(feedback);
+        const card = document.createElement('div');
+        card.style.cssText = [
+            'background:#1a1a2e;border:2px solid #4a90e2;border-radius:12px',
+            'padding:28px 32px;width:680px;max-width:90vw;box-sizing:border-box;color:white',
+        ].join(';');
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
 
         function loadQuestion() {
             if (questionIndex >= questions.length) {
-                // Done
-                bg.isVisible = false;
+                document.body.removeChild(overlay);
+                // if (typeof Minimap !== 'undefined') Minimap.show();
                 onComplete(score >= PASS_THRESHOLD, score, questions.length);
                 return;
             }
 
             const q = questions[questionIndex];
-            progress.text = `Question ${questionIndex + 1} of ${questions.length}  |  Score: ${score}`;
-            qText.text = q.question;
-            feedback.text = "";
+            card.innerHTML = '';
 
-            // Clear old buttons
-            btnStack.clearControls();
+            const header = document.createElement('div');
+            header.style.cssText = 'color:#4a90e2;font-size:22px;text-align:center;margin-bottom:8px';
+            header.textContent = 'Job Interview — Delivery Driver';
+            card.appendChild(header);
+
+            const progress = document.createElement('div');
+            progress.style.cssText = 'color:#aaa;font-size:16px;text-align:center;margin-bottom:16px';
+            progress.textContent = `Question ${questionIndex + 1} of ${questions.length}  |  Score: ${score}`;
+            card.appendChild(progress);
+
+            const qText = document.createElement('div');
+            qText.style.cssText = 'font-size:20px;margin-bottom:16px;min-height:60px';
+            qText.textContent = q.question;
+            card.appendChild(qText);
+
+            const feedback = document.createElement('div');
+            feedback.style.cssText = 'height:32px;font-size:18px;margin-top:8px';
+            card.appendChild(feedback);
 
             q.choices.forEach((choice, idx) => {
-                const btn = BABYLON.GUI.Button.CreateSimpleButton(`choice_${idx}`, choice);
-                btn.width = "580px";
-                btn.height = "46px";
-                btn.color = "white";
-                btn.background = "#2c3e50";
-                btn.fontSize = 17;
-                btn.thickness = 1;
-                btn.cornerRadius = 6;
-                btn.paddingTop = "6px";
-                btn.textBlock.textWrapping = true;
-
-                btn.onPointerClickObservable.add(() => {
+                const btn = document.createElement('button');
+                btn.textContent = choice;
+                btn.style.cssText = [
+                    'display:block;width:100%;margin-bottom:8px',
+                    'padding:10px 14px;background:#2c3e50;color:white',
+                    'border:1px solid #555;border-radius:6px',
+                    'font-size:17px;cursor:pointer;text-align:left',
+                ].join(';');
+                btn.addEventListener('mouseover', () => { btn.style.background = '#3d5166'; });
+                btn.addEventListener('mouseout',  () => { if (!btn.disabled) btn.style.background = '#2c3e50'; });
+                btn.addEventListener('click', () => {
                     const correct = idx === q.correct;
                     if (correct) {
                         score++;
-                        feedback.text = "✓ Correct!";
-                        feedback.color = "#2ecc71";
+                        feedback.style.color = '#2ecc71';
+                        feedback.textContent = '✓ Correct!';
                     } else {
-                        feedback.text = `✗ Wrong. Correct answer: "${q.choices[q.correct]}"`;
-                        feedback.color = "#e74c3c";
+                        feedback.style.color = '#e74c3c';
+                        feedback.textContent = `✗ Wrong. Correct answer: "${q.choices[q.correct]}"`;
                     }
-                    // Disable all buttons
-                    btnStack.children.forEach((b) => (b.isEnabled = false));
-                    // Next question after delay
+                    card.querySelectorAll('button').forEach((b) => {
+                        b.disabled = true;
+                        b.style.cursor = 'default';
+                    });
                     setTimeout(() => {
                         questionIndex++;
                         loadQuestion();
                     }, 1400);
                 });
-
-                btnStack.addControl(btn);
+                card.insertBefore(btn, feedback);
             });
         }
 
@@ -287,6 +245,7 @@ const UI = (() => {
 
     return {
         init,
+        getAdvTexture: () => advTexture,
         showText,
         showInteractHint,
         hideInteractHint,
