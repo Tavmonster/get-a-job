@@ -166,15 +166,19 @@
                     UI.showMission("");
                     Player.setEnabled(false);
                     Player.teleport(World.getPlayerSpawnPos());
-                    setTimeout(() => UI.showEndScreen(false, () => location.reload()), 800);
+                    setTimeout(() => {
+                        Cutscene.play('gameover', () => {
+                            UI.showEndScreen(false, () => location.reload());
+                        });
+                    }, 800);
                     break;
             }
         });
 
-        // ── Intro sequence ───────────────────────────────────────────
-        setTimeout(() => {
+        // ── Intro cutscene ────────────────────────────────────────────
+        Cutscene.play('intro', () => {
             GameState.set(GameState.STATES.WALK_TO_STORE);
-        }, 1000);
+        });
 
         // ── Helper: distance between a position and a trigger box ────
         function nearTrigger(pos, trigger, dist = 9) {
@@ -345,6 +349,9 @@
             // ── NPC Cars ─────────────────────────────────────────
             NPCCars.update();
 
+            // Suspend player movement and all interaction input during cutscenes
+            if (Cutscene.isActive()) return;
+
             // ── Walking states ──────────────────────────────────────
             if (gs === S.WALK_TO_STORE || gs === S.PAYDAY || gs === S.FAST_FOOD || gs === S.HOTEL) {
                 Player.update();
@@ -374,7 +381,11 @@
                         interactHintActive = "store";
                     }
                     if (Input.consumePress("KeyE")) {
-                        GameState.set(S.INTERVIEW);
+                        UI.hideInteractHint();
+                        interactHintActive = "";
+                        Cutscene.play('interview', () => {
+                            GameState.set(S.INTERVIEW);
+                        });
                     }
                 } else {
                     if (interactHintActive === "store") {
@@ -454,12 +465,10 @@
                         paydayReady = false;
                         UI.hideInteractHint();
                         interactHintActive = "";
-                        UI.setMoney(100);
-                        UI.showText("Manager: 'You did great today! Here is your first paycheck — $100!'", 5000);
-                        setTimeout(() => {
-                            UI.showText("Your stomach growls. Better grab some food first.", 4000);
+                        Cutscene.play('payday', () => {
+                            UI.setMoney(100);
                             GameState.set(S.FAST_FOOD);
-                        }, 5500);
+                        });
                     }
                 } else {
                     if (interactHintActive === "manager") {
@@ -479,11 +488,10 @@
                     if (Input.consumePress("KeyE")) {
                         UI.hideInteractHint();
                         interactHintActive = "";
-                        UI.setMoney(90);
-                        UI.showText("Mmm, a Burger Barn classic! That hit the spot. $90 left.", 4000);
-                        setTimeout(() => {
+                        Cutscene.play('fastfood', () => {
+                            UI.setMoney(90);
                             GameState.set(S.HOTEL);
-                        }, 4500);
+                        });
                     }
                 } else {
                     if (interactHintActive === "fastfood") {
@@ -499,14 +507,15 @@
                     if (interactHintActive !== "hotel") {
                         UI.showInteractHint("Press E to check in to the hotel");
                         interactHintActive = "hotel";
-                    }
-                    if (Input.consumePress("KeyE")) {
+                        Input.flushPress("KeyE"); // discard any pre-buffered presses
+                    } else if (Input.consumePress("KeyE")) {
                         Player.setEnabled(false);
                         UI.hideInteractHint();
                         interactHintActive = "";
-                        UI.setMoney(30);
-                        UI.showText("You pay $60 for a room and get some well-deserved rest. $30 left over.", 5000);
-                        setTimeout(() => UI.showEndScreen(true, () => location.reload()), 5500);
+                        Cutscene.play('hotel', () => {
+                            UI.setMoney(30);
+                            UI.showEndScreen(true, () => location.reload());
+                        });
                     }
                 } else {
                     if (interactHintActive === "hotel") {
