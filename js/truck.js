@@ -136,7 +136,7 @@ const Truck = (() => {
             ];
 
             const collisionFilter = (m) =>
-                m.checkCollisions
+                (m.checkCollisions || m.metadata?.isNPCCar)
                 && m.name !== "truckPivot"
                 && m.name !== "truckCollider"
                 && !m.name.startsWith("wheel")
