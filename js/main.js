@@ -143,6 +143,7 @@
                     UI.showMission("Collect Paycheck");
                     Player.setEnabled(true);
                     Truck.setDriving(false);
+                    Truck.resetToSpawn();
                     GameCamera.switchTarget(playerMesh);
                     UI.showText("Great work! Go back to the store to collect your paycheck.", 5000);
                     if (storeData) Minimap.setObjective(storeData.trigger.position);
@@ -181,12 +182,159 @@
             return BABYLON.Vector3.Distance(pos, trigger.position) < dist;
         }
 
+        // ── Debug phase-skip menu ─────────────────────────────────────
+        let _debugPanel = null;
+        let _debugVisible = false;
+
+        function _debugSkipToPhase(phase) {
+            const S = GameState.STATES;
+            // Stop driving if active
+            if (Truck.isDrivingActive()) {
+                Truck.setDriving(false);
+                GameCamera.switchTarget(playerMesh);
+            }
+            // Per-phase setup
+            switch (phase) {
+                case S.WALK_TO_STORE:
+                    Player.setEnabled(true);
+                    Player.teleport(World.getPlayerSpawnPos());
+                    break;
+                case S.INTERVIEW:
+                    Player.setEnabled(true);
+                    Player.teleport(World.getPlayerSpawnPos());
+                    break;
+                case S.HIRED:
+                    interviewScore = 5;
+                    Player.setEnabled(true);
+                    Player.teleport(World.getPlayerSpawnPos());
+                    break;
+                case S.DELIVERING:
+                    interviewScore = 5;
+                    Truck.setVisible(true);
+                    Player.setEnabled(true);
+                    Player.teleport(World.getTruckSpawnPos());
+                    GameCamera.switchTarget(playerMesh);
+                    break;
+                case S.RETURN_DEPOT:
+                    Truck.setVisible(true);
+                    Packages.deliverAll();
+                    Player.setEnabled(true);
+                    Player.teleport(World.getTruckSpawnPos());
+                    GameCamera.switchTarget(playerMesh);
+                    break;
+                case S.PAYDAY:
+                    Truck.setVisible(true);
+                    Packages.deliverAll();
+                    Player.setEnabled(true);
+                    Player.teleport(World.getPlayerSpawnPos());
+                    GameCamera.switchTarget(playerMesh);
+                    // PAYDAY handler sets paydayReady = true
+                    break;
+                case S.FAST_FOOD:
+                    UI.setMoney(100);
+                    Player.setEnabled(true);
+                    Player.teleport(World.getPlayerSpawnPos());
+                    GameCamera.switchTarget(playerMesh);
+                    break;
+                case S.HOTEL:
+                    UI.setMoney(90);
+                    Player.setEnabled(true);
+                    Player.teleport(World.getPlayerSpawnPos());
+                    GameCamera.switchTarget(playerMesh);
+                    break;
+            }
+            GameState.set(phase);
+            _hideDebugPanel();
+        }
+
+        function _hideDebugPanel() {
+            if (_debugPanel) _debugPanel.isVisible = false;
+            _debugVisible = false;
+        }
+
+        function _showDebugPanel() {
+            if (!_debugPanel) _buildDebugPanel();
+            if (_debugPanel) _debugPanel.isVisible = true;
+            _debugVisible = true;
+        }
+
+        function _buildDebugPanel() {
+            const guiTexture = UI.getAdvTexture();
+            if (!guiTexture) return;
+
+            const S = GameState.STATES;
+            const phases = [
+                S.WALK_TO_STORE,
+                S.INTERVIEW,
+                S.HIRED,
+                S.DELIVERING,
+                S.RETURN_DEPOT,
+                S.PAYDAY,
+                S.FAST_FOOD,
+                S.HOTEL,
+            ];
+
+            _debugPanel = new BABYLON.GUI.Rectangle("debugPanel");
+            _debugPanel.background = "rgba(0,0,0,0.80)";
+            _debugPanel.thickness = 1;
+            _debugPanel.color = "#666";
+            _debugPanel.cornerRadius = 6;
+            _debugPanel.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_CENTER;
+            _debugPanel.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT;
+            _debugPanel.width = "230px";
+            _debugPanel.adaptHeightToChildren = true;
+            _debugPanel.left = "-16px";
+            guiTexture.addControl(_debugPanel);
+
+            const stack = new BABYLON.GUI.StackPanel("debugStack");
+            stack.paddingTop = "8px";
+            stack.paddingBottom = "8px";
+            _debugPanel.addControl(stack);
+
+            const titleBlock = new BABYLON.GUI.TextBlock("debugTitle");
+            titleBlock.text = "DEBUG — Skip to Phase";
+            titleBlock.color = "#FFD700";
+            titleBlock.fontSize = 15;
+            titleBlock.fontFamily = "Arial";
+            titleBlock.fontStyle = "bold";
+            titleBlock.height = "28px";
+            stack.addControl(titleBlock);
+
+            phases.forEach(phase => {
+                const btn = BABYLON.GUI.Button.CreateSimpleButton(`dbg_${phase}`, phase);
+                btn.width = "205px";
+                btn.height = "30px";
+                btn.color = "white";
+                btn.background = "#2a2a2a";
+                btn.fontSize = 14;
+                btn.thickness = 1;
+                btn.cornerRadius = 4;
+                btn.paddingTop = "3px";
+                btn.onPointerClickObservable.add(() => _debugSkipToPhase(phase));
+                stack.addControl(btn);
+            });
+
+            const closeHint = new BABYLON.GUI.TextBlock("debugClose");
+            closeHint.text = "[ ` ] to close";
+            closeHint.color = "#666";
+            closeHint.fontSize = 12;
+            closeHint.fontFamily = "Arial";
+            closeHint.height = "22px";
+            stack.addControl(closeHint);
+        }
+
         // ── Render loop ──────────────────────────────────────────────
         scene.registerBeforeRender(() => {
             const gs = GameState.get();
             const S  = GameState.STATES;
             const playerPos = Player.getPosition();
             const truckPos  = truckMesh ? truckMesh.position : BABYLON.Vector3.Zero();
+
+            // ── Debug menu toggle ───────────────────────────────
+            if (Input.consumePress("Backquote")) {
+                if (_debugVisible) _hideDebugPanel();
+                else _showDebugPanel();
+            }
 
             // ── Camera ─────────────────────────────────────────
             GameCamera.update();

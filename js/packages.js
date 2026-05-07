@@ -77,5 +77,15 @@ const Packages = (() => {
 
     function getRemaining() { return remaining; }
 
-    return { init, activate, checkDeliveries, getRemaining };
+    /** Debug helper: instantly mark all packages as delivered. */
+    function deliverAll() {
+        deliveryPoints.forEach(dp => {
+            if (dp.marker) dp.marker.setEnabled(false);
+            if (dp.trigger) dp.trigger.setEnabled(false);
+        });
+        remaining = 0;
+        UI.hideHUD();
+    }
+
+    return { init, activate, checkDeliveries, getRemaining, deliverAll };
 })();
