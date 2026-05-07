@@ -14,13 +14,23 @@
  * Fixes get-a-job-2vs
  */
 const NPCCars = (() => {
-    const CAR_SPEED      = 0.10;   // units/frame cruise speed
+    const CAR_SPEED      = 0.075;   // units/frame cruise speed
     const TURN_SPEED     = 0.06;   // rad/frame max yaw rate
     const REACH_DIST     = 4.5;    // waypoint snap distance (units)
     const LOOK_AHEAD     = 9.0;    // avoidance ray length (units)
     const STOP_DIST      = 3.5;    // full-stop distance (units)
     const CAR_HALF_W     = 0.9;    // lateral offset of side avoidance rays
     const HIT_DIST       = 2.6;    // distance from car pivot that counts as a player hit
+    const RAY_INTERVAL   = 3;      // only recast avoidance rays every N frames
+
+    // Pre-allocated reusable objects to avoid per-frame GC pressure
+    const _fwd      = new BABYLON.Vector3();
+    const _rgt      = new BABYLON.Vector3();
+    const _frontBase= new BABYLON.Vector3();
+    const _orig0    = new BABYLON.Vector3();
+    const _orig1    = new BABYLON.Vector3();
+    const _orig2    = new BABYLON.Vector3();
+    const _ray      = new BABYLON.Ray(BABYLON.Vector3.Zero(), BABYLON.Vector3.Forward(), 1);
 
     // ── Clockwise rectangular loop routes ────────────────────────────
     // Waypoints are [x, z] corners at road intersections, offset 2 units
@@ -180,7 +190,12 @@ const NPCCars = (() => {
         });
     }
 
+    let frameCount = 0;
+
     function update() {
+        frameCount++;
+        const doRaycasts = (frameCount % RAY_INTERVAL) === 0;
+
         for (const car of cars) {
             const pos = car.pivot.position;
             const wp  = car.route[car.wpIdx];
@@ -215,65 +230,47 @@ const NPCCars = (() => {
                 alignMult = Math.max(0, Math.cos(diff));
             }
 
-            // ── Avoidance rays ────────────────────────────────────────
-            const fwd = new BABYLON.Vector3(
-                Math.sin(car.pivot.rotation.y),
-                0,
-                Math.cos(car.pivot.rotation.y)
-            );
-            const rgt = new BABYLON.Vector3(
-                Math.cos(car.pivot.rotation.y),
-                0,
-                -Math.sin(car.pivot.rotation.y)
-            );
+            // ── Avoidance rays (throttled to every RAY_INTERVAL frames) ────
+            if (doRaycasts) {
+                const sinY = Math.sin(car.pivot.rotation.y);
+                const cosY = Math.cos(car.pivot.rotation.y);
+                _fwd.set(sinY, 0, cosY);
+                _rgt.set(cosY, 0, -sinY);
 
-            // Three ray origins: centre, left edge, right edge of the car front
-            const frontBase = new BABYLON.Vector3(
-                pos.x + fwd.x * 2.2,
-                0.9,
-                pos.z + fwd.z * 2.2
-            );
-            const origins = [
-                frontBase,
-                new BABYLON.Vector3(
-                    frontBase.x + rgt.x * CAR_HALF_W,
-                    frontBase.y,
-                    frontBase.z + rgt.z * CAR_HALF_W
-                ),
-                new BABYLON.Vector3(
-                    frontBase.x - rgt.x * CAR_HALF_W,
-                    frontBase.y,
-                    frontBase.z - rgt.z * CAR_HALF_W
-                ),
-            ];
+                _frontBase.set(pos.x + _fwd.x * 2.2, 0.9, pos.z + _fwd.z * 2.2);
+                _orig0.copyFrom(_frontBase);
+                _orig1.set(_frontBase.x + _rgt.x * CAR_HALF_W, _frontBase.y, _frontBase.z + _rgt.z * CAR_HALF_W);
+                _orig2.set(_frontBase.x - _rgt.x * CAR_HALF_W, _frontBase.y, _frontBase.z - _rgt.z * CAR_HALF_W);
 
-            const ownCol  = car.collider;
-            let minHitDist = LOOK_AHEAD + 1;
+                const ownCol = car.collider;
+                let minHitDist = LOOK_AHEAD + 1;
 
-            for (const origin of origins) {
-                const ray = new BABYLON.Ray(origin, fwd, LOOK_AHEAD);
-                const hit = scene_.pickWithRay(ray, m =>
-                    m !== ownCol &&
-                    (m.metadata?.isNPCCar === true || m.name === "truckCollider")
-                );
-                if (hit && hit.hit && hit.distance < minHitDist) {
-                    minHitDist = hit.distance;
+                for (const origin of [_orig0, _orig1, _orig2]) {
+                    _ray.origin.copyFrom(origin);
+                    _ray.direction.copyFrom(_fwd);
+                    _ray.length = LOOK_AHEAD;
+                    const hit = scene_.pickWithRay(_ray, m =>
+                        m !== ownCol &&
+                        (m.metadata?.isNPCCar === true || m.name === "truckCollider")
+                    );
+                    if (hit && hit.hit && hit.distance < minHitDist) {
+                        minHitDist = hit.distance;
+                    }
                 }
+
+                car._speedMult = minHitDist <= LOOK_AHEAD
+                    ? Math.max(0, (minHitDist - STOP_DIST) / (LOOK_AHEAD - STOP_DIST))
+                    : 1.0;
             }
 
-            // Smooth speed reduction: full speed at LOOK_AHEAD, stopped at STOP_DIST
-            let speedMult = 1.0;
-            if (minHitDist <= LOOK_AHEAD) {
-                speedMult = Math.max(
-                    0,
-                    (minHitDist - STOP_DIST) / (LOOK_AHEAD - STOP_DIST)
-                );
-            }
+            const speedMult = car._speedMult ?? 1.0;
 
             // ── Move ──────────────────────────────────────────────────
+            const sinY = Math.sin(car.pivot.rotation.y);
+            const cosY = Math.cos(car.pivot.rotation.y);
             const mv = car.speed * speedMult * alignMult;
-            pos.x += fwd.x * mv;
-            pos.z += fwd.z * mv;
+            pos.x += sinY * mv;
+            pos.z += cosY * mv;
             pos.y  = 0;
             // ── Player knockback ──────────────────────────────────────────
             const playerPos = Player.getPosition();

@@ -9,6 +9,7 @@
  *   DELIVERING     → driving truck, delivering 5 packages
  *   RETURN_DEPOT   → all packages delivered, drive back
  *   PAYDAY         → manager gives $100 paycheck
+ *   FAST_FOOD      → player visits Burger Barn and spends $10
  *   HOTEL          → player walks to hotel, win
  *   GAME_OVER      → failed interview
  */
@@ -21,6 +22,7 @@ const GameState = (() => {
         DELIVERING:    "DELIVERING",
         RETURN_DEPOT:  "RETURN_DEPOT",
         PAYDAY:        "PAYDAY",
+        FAST_FOOD:     "FAST_FOOD",
         HOTEL:         "HOTEL",
         GAME_OVER:     "GAME_OVER",
     };

@@ -17,8 +17,9 @@
  */
 const NPCSystem = (() => {
 
-    const SPEED = 0.05;  // units per frame
+    const SPEED = 0.0375;  // units per frame
     const REACH = 0.8;   // distance to count waypoint as reached
+    let _frame  = 0;
 
     // Appearance variants: skin, hair, shirt, pants  (RGB 0-1)
     const VARIANTS = [
@@ -192,6 +193,9 @@ const NPCSystem = (() => {
     }
 
     function update() {
+        _frame++;
+        const animFrame = (_frame & 1) === 0; // update limb rotations every other frame
+
         for (const npc of npcs) {
             const pos = npc.root.position;
             const wp  = npc.route[npc.wpIdx];
@@ -203,30 +207,31 @@ const NPCSystem = (() => {
             const dist = Math.sqrt(dx * dx + dz * dz);
 
             if (dist < REACH) {
-                // Snap to waypoint, advance to next (looping)
                 pos.x  = tx;
                 pos.z  = tz;
                 pos.y  = 1.0;
                 npc.wpIdx = (npc.wpIdx + 1) % npc.route.length;
 
-                npc.legL.rotation.x = 0;
-                npc.legR.rotation.x = 0;
-                npc.armL.rotation.x = 0;
-                npc.armR.rotation.x = 0;
+                if (animFrame) {
+                    npc.legL.rotation.x = 0;
+                    npc.legR.rotation.x = 0;
+                    npc.armL.rotation.x = 0;
+                    npc.armR.rotation.x = 0;
+                }
             } else {
-                // Face and step toward target
                 npc.root.rotation.y = Math.atan2(dx, dz);
                 pos.x += (dx / dist) * SPEED;
                 pos.z += (dz / dist) * SPEED;
                 pos.y  = 1.0;
 
-                // Leg / arm swing animation
-                npc.phase += 0.10;
-                const swing = Math.sin(npc.phase) * 0.45;
-                npc.legL.rotation.x =  swing;
-                npc.legR.rotation.x = -swing;
-                npc.armL.rotation.x = -swing * 0.6;
-                npc.armR.rotation.x =  swing * 0.6;
+                if (animFrame) {
+                    npc.phase += 0.20; // doubled since we update half as often
+                    const swing = Math.sin(npc.phase) * 0.45;
+                    npc.legL.rotation.x =  swing;
+                    npc.legR.rotation.x = -swing;
+                    npc.armL.rotation.x = -swing * 0.6;
+                    npc.armR.rotation.x =  swing * 0.6;
+                }
             }
         }
     }

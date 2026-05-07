@@ -16,6 +16,7 @@ const World = (() => {
         truckPad:    "#555500",
         store:       "#e8d5b0",
         hotel:       "#003366",
+        fastFood:    "#cc3300",
         hiringSign:  "#ff0000",
         windowClr:   "#87CEEB",
         door:        "#6B3A2A",
@@ -51,8 +52,9 @@ const World = (() => {
 
     const PARK_COLS  = [0, 1];
     const PARK_ROWS  = [0, 1];
-    const STORE_POS  = { col: 5, row: 1 };
-    const HOTEL_POS  = { col: 5, row: 5 };
+    const STORE_POS     = { col: 5, row: 1 };
+    const HOTEL_POS     = { col: 5, row: 5 };
+    const FAST_FOOD_POS = { col: 3, row: 5 };
     const DEPOT_POS         = { col: 6, row: 1 };
     const DEPOT_FORECOURT_POS = { col: DEPOT_POS.col, row: DEPOT_POS.row - 1 };
 
@@ -93,13 +95,16 @@ const World = (() => {
         // ── Roads ─────────────────────────────────────────────────────
         // Horizontal roads — placed between rows (at half-integer offsets)
         // ROWS+1 roads so streets frame every row of buildings
+        const roadMat = mat(scene, COLOURS.road);
+        const roadMeshes = [];
         for (let row = 0; row <= ROWS; row++) {
             const road = BABYLON.MeshBuilder.CreateGround("roadH_" + row, {
                 width: COLS * BLOCK + 8,   // spans grid only: outermost road centres (±105) + half road width (±4)
                 height: 8,
             }, scene);
             road.position.set(0, 0.01, OZ + (row - 0.5) * BLOCK);
-            road.material = mat(scene, COLOURS.road);
+            road.material = roadMat;
+            roadMeshes.push(road);
         }
         // Vertical roads — placed between columns (at half-integer offsets)
         // COLS+1 roads so streets frame every column of buildings
@@ -109,7 +114,14 @@ const World = (() => {
                 height: ROWS * BLOCK + 8,  // spans grid only: outermost road centres (±105) + half road width (±4)
             }, scene);
             road.position.set(OX + (col - 0.5) * BLOCK, 0.01, 0);
-            road.material = mat(scene, COLOURS.road);
+            road.material = roadMat;
+            roadMeshes.push(road);
+        }
+        // Merge into one draw call.
+        const mergedRoads = BABYLON.Mesh.MergeMeshes(roadMeshes, true, true);
+        if (mergedRoads) {
+            mergedRoads.name = "roads";
+            mergedRoads.material = roadMat;
         }
 
         buildSidewalks(scene);
@@ -120,6 +132,7 @@ const World = (() => {
                 const isPark        = PARK_COLS.includes(col) && PARK_ROWS.includes(row);
                 const isStore       = col === STORE_POS.col && row === STORE_POS.row;
                 const isHotel       = col === HOTEL_POS.col && row === HOTEL_POS.row;
+                const isFastFood    = col === FAST_FOOD_POS.col && row === FAST_FOOD_POS.row;
                 const isDepot       = col === DEPOT_POS.col && row === DEPOT_POS.row;
                 const isForecourt   = col === DEPOT_FORECOURT_POS.col && row === DEPOT_FORECOURT_POS.row;
                 const isDel         = isDeliveryCell(col, row);
@@ -142,6 +155,11 @@ const World = (() => {
 
                 if (isHotel) {
                     specialBuildings[key] = buildHotel(scene, pos);
+                    continue;
+                }
+
+                if (isFastFood) {
+                    specialBuildings[key] = buildFastFood(scene, pos);
                     continue;
                 }
 
@@ -220,6 +238,29 @@ const World = (() => {
         }
 
         buildBoundaryWalls(scene);
+
+        // Freeze all static mesh world matrices — tells Babylon to skip
+        // recomputing transforms for these meshes every frame, which cuts
+        // CPU significantly for large static scenes.
+        // Exclusions: anything that moves or has a moving parent.
+        const SKIP_PREFIXES = [
+            "dot_", "npcCar", "truck", "npc_", "objMarker", "fastfoodMM",
+            // player parts
+            "playerBody", "legL", "legR", "shoeL", "shoeR", "torso", "shirt",
+            "tie", "armL", "armR", "handL", "handR", "head", "hair", "neck",
+            "collar", "lapelL", "lapelR", "pocket",
+            // npc parts
+            "npcRoot", "npcLeg", "npcArm", "npcHead", "npcTorso", "npcBody",
+            "npcHair", "npcNeck", "npcShoe",
+        ];
+        scene.meshes.forEach(m => {
+            const skip = SKIP_PREFIXES.some(p => m.name.startsWith(p)) || m.parent;
+            if (!skip) {
+                m.freezeWorldMatrix();
+                m.doNotSyncBoundingInfo = true;
+                m.isPickable = false;
+            }
+        });
 
         return specialBuildings;
     }
@@ -598,6 +639,64 @@ const World = (() => {
         return { type: "hotel", bld, trigger, pos };
     }
 
+    // ── Fast Food Restaurant ──────────────────────────────────────────
+    function buildFastFood(scene, pos) {
+        const w = 13, h = 6, d = 13;
+
+        const bld = BABYLON.MeshBuilder.CreateBox("fastfood", { width: w, height: h, depth: d }, scene);
+        bld.position.set(pos.x, h / 2, pos.z);
+        bld.material = mat(scene, COLOURS.fastFood);
+        bld.checkCollisions = true;
+
+        // Roof overhang in yellow
+        const roof = BABYLON.MeshBuilder.CreateBox("fastfoodRoof", { width: w + 2, height: 0.6, depth: d + 2 }, scene);
+        roof.position.set(pos.x, h + 0.3, pos.z);
+        roof.material = mat(scene, "#f39c12");
+
+        // Building label
+        const label = BABYLON.MeshBuilder.CreatePlane("fastfoodLabel", { width: 9, height: 2.2 }, scene);
+        label.position.set(pos.x, 4.0, pos.z - d / 2 - 0.05);
+        label.material = new BABYLON.StandardMaterial("fastfoodLabelMat", scene);
+        const labelTex = new BABYLON.DynamicTexture("fastfoodLabelTex", { width: 512, height: 128 }, scene);
+        labelTex.drawText("BURGER BARN", null, 88, "bold 72px Arial", "#ffffff", "#cc3300", true);
+        label.material.diffuseTexture = labelTex;
+        label.material.emissiveColor = new BABYLON.Color3(1, 0.4, 0.2);
+        label.material.backFaceCulling = false;
+
+        // Price sign
+        const pricePlane = BABYLON.MeshBuilder.CreatePlane("fastfoodPrice", { width: 4, height: 1.1 }, scene);
+        pricePlane.position.set(pos.x, h - 0.5, pos.z - d / 2 - 0.1);
+        const priceTex = new BABYLON.DynamicTexture("fastfoodPriceTex", { width: 256, height: 64 }, scene);
+        priceTex.drawText("MEAL  $10", null, 48, "bold 40px Arial", "#ffffff", "#f39c12", true);
+        pricePlane.material = new BABYLON.StandardMaterial("fastfoodPriceMat", scene);
+        pricePlane.material.diffuseTexture = priceTex;
+        pricePlane.material.emissiveColor = new BABYLON.Color3(1, 0.8, 0);
+        pricePlane.material.backFaceCulling = false;
+
+        // Trigger zone (in front of door)
+        const trigger = BABYLON.MeshBuilder.CreateBox("fastfoodTrigger", { width: 6, height: 3, depth: 4 }, scene);
+        trigger.position.set(pos.x, 1.5, pos.z - d / 2 - 2);
+        trigger.isVisible = false;
+        trigger.isPickable = false;
+        trigger.metadata = { type: "fastfoodTrigger" };
+
+        // Minimap marker — large flat disc elevated well above the roof.
+        // Uses 0x20000000 (same layer as player/truck dots — proven to render on minimap).
+        const mmMarker = BABYLON.MeshBuilder.CreateGround("fastfoodMM", {
+            width: 22, height: 22,
+        }, scene);
+        mmMarker.position.set(pos.x, h + 8, pos.z);
+        const mmMat = new BABYLON.StandardMaterial("fastfoodMMMat", scene);
+        mmMat.diffuseColor    = new BABYLON.Color3(1, 0.35, 0);
+        mmMat.emissiveColor   = new BABYLON.Color3(1, 0.35, 0);
+        mmMat.disableLighting = true;
+        mmMarker.material   = mmMat;
+        mmMarker.isPickable = false;
+        mmMarker.layerMask  = 0x20000000;  // minimap-only (same as player/truck dots)
+
+        return { type: "fastfood", bld, trigger, pos, mmMarker };
+    }
+
     // ── Depot (truck parking) ─────────────────────────────────────────
     function buildDepot(scene, pos) {
         const w = 16, h = 7, d = 18;
@@ -638,10 +737,13 @@ const World = (() => {
         // fits exactly between the ±4-unit vertical/horizontal crossing zones
         // and never overlaps the roads or intersections.  Segments adjacent to
         // park cells or the depot forecourt are omitted entirely.
+        // All strips share one material and are merged into a single mesh to
+        // minimise draw calls.
         const swMat = mat(scene, COLOURS.sidewalk);
         const swW   = 2;            // width perpendicular to the road
         const swLen = BLOCK - 8;    // = 22; fits between road-crossing zones
         const swY   = 0.02;         // just above road surface (y = 0.01)
+        const strips = [];
 
         // Returns true for cells that should NOT get an adjacent sidewalk.
         function noSidewalk(col, row) {
@@ -666,6 +768,7 @@ const World = (() => {
                         { width: swLen, height: swW }, scene);
                     sw.position.set(xSeg, swY, zRoad + 4 + swW / 2);
                     sw.material = swMat;
+                    strips.push(sw);
                 }
 
                 // South-side strip
@@ -675,6 +778,7 @@ const World = (() => {
                         { width: swLen, height: swW }, scene);
                     sw.position.set(xSeg, swY, zRoad - 4 - swW / 2);
                     sw.material = swMat;
+                    strips.push(sw);
                 }
             }
         }
@@ -694,6 +798,7 @@ const World = (() => {
                         { width: swW, height: swLen }, scene);
                     sw.position.set(xRoad + 4 + swW / 2, swY, zSeg);
                     sw.material = swMat;
+                    strips.push(sw);
                 }
 
                 // West-side strip
@@ -703,7 +808,17 @@ const World = (() => {
                         { width: swW, height: swLen }, scene);
                     sw.position.set(xRoad - 4 - swW / 2, swY, zSeg);
                     sw.material = swMat;
+                    strips.push(sw);
                 }
+            }
+        }
+
+        // Merge all strips into one draw call.
+        if (strips.length > 0) {
+            const merged = BABYLON.Mesh.MergeMeshes(strips, true, true);
+            if (merged) {
+                merged.name = "sidewalks";
+                merged.material = swMat;
             }
         }
     }
@@ -745,53 +860,45 @@ const World = (() => {
     }
 
     // ── Windows helper ────────────────────────────────────────────────
+    // All window planes for a building are merged into one mesh so the
+    // entire building costs only 1 draw call for its windows.
     function addWindows(scene, pos, w, h, d, colIdx) {
         const winMat = mat(scene, COLOURS.windowClr);
         winMat.emissiveColor = new BABYLON.Color3(0.4, 0.7, 1.0);
-        const floors = Math.max(1, Math.floor(h / 3));
-        const perWall = 2;
+        // Cap at 2 floors to limit mesh count.
+        const floors = Math.min(2, Math.max(1, Math.floor(h / 3)));
+        const meshes = [];
         for (let f = 0; f < floors; f++) {
-            for (let i = 0; i < perWall; i++) {
-                // Left / west face
-                const winL = BABYLON.MeshBuilder.CreatePlane("winL_" + colIdx + f + i, { width: 1.2, height: 1 }, scene);
-                winL.position.set(
-                    pos.x + (-w / 2 - 0.02),
-                    1.5 + f * 3,
-                    pos.z + (i - 0.5) * (d / 3)
-                );
-                winL.rotation.y = Math.PI / 2;
-                winL.material = winMat;
+            const y = 1.5 + f * 3;
+            // One centred window per face per floor.
+            const winL = BABYLON.MeshBuilder.CreatePlane("win_" + colIdx + "_L" + f, { width: 1.2, height: 1 }, scene);
+            winL.position.set(pos.x - w / 2 - 0.02, y, pos.z);
+            winL.rotation.y = Math.PI / 2;
+            winL.material = winMat;
 
-                // Right / east face (mirrored)
-                const winR = BABYLON.MeshBuilder.CreatePlane("winR_" + colIdx + f + i, { width: 1.2, height: 1 }, scene);
-                winR.position.set(
-                    pos.x + (w / 2 + 0.02),
-                    1.5 + f * 3,
-                    pos.z + (i - 0.5) * (d / 3)
-                );
-                winR.rotation.y = -Math.PI / 2;
-                winR.material = winMat;
+            const winR = BABYLON.MeshBuilder.CreatePlane("win_" + colIdx + "_R" + f, { width: 1.2, height: 1 }, scene);
+            winR.position.set(pos.x + w / 2 + 0.02, y, pos.z);
+            winR.rotation.y = -Math.PI / 2;
+            winR.material = winMat;
 
-                // Front / south face
-                const winS = BABYLON.MeshBuilder.CreatePlane("winS_" + colIdx + f + i, { width: 1.2, height: 1 }, scene);
-                winS.position.set(
-                    pos.x + (i - 0.5) * (w / 3),
-                    1.5 + f * 3,
-                    pos.z + (-d / 2 - 0.02)
-                );
-                winS.rotation.y = 0;
-                winS.material = winMat;
+            const winS = BABYLON.MeshBuilder.CreatePlane("win_" + colIdx + "_S" + f, { width: 1.2, height: 1 }, scene);
+            winS.position.set(pos.x, y, pos.z - d / 2 - 0.02);
+            winS.rotation.y = 0;
+            winS.material = winMat;
 
-                // Back / north face
-                const winN = BABYLON.MeshBuilder.CreatePlane("winN_" + colIdx + f + i, { width: 1.2, height: 1 }, scene);
-                winN.position.set(
-                    pos.x + (i - 0.5) * (w / 3),
-                    1.5 + f * 3,
-                    pos.z + (d / 2 + 0.02)
-                );
-                winN.rotation.y = Math.PI;
-                winN.material = winMat;
-            }
+            const winN = BABYLON.MeshBuilder.CreatePlane("win_" + colIdx + "_N" + f, { width: 1.2, height: 1 }, scene);
+            winN.position.set(pos.x, y, pos.z + d / 2 + 0.02);
+            winN.rotation.y = Math.PI;
+            winN.material = winMat;
+
+            meshes.push(winL, winR, winS, winN);
+        }
+        if (meshes.length === 0) return;
+        // Merge all planes into one mesh — disposeSource=true, allow32bit=true.
+        const merged = BABYLON.Mesh.MergeMeshes(meshes, true, true);
+        if (merged) {
+            merged.name = "windows_" + colIdx;
+            merged.material = winMat;
         }
     }
 
@@ -816,9 +923,8 @@ const World = (() => {
     }
 
     function getPlayerSpawnPos() {
-        // TEMP: spawn in front of the store
-        const p = gridPos(STORE_POS.col, STORE_POS.row);
-        return new BABYLON.Vector3(p.x, 1, p.z - 14);
+        const p = gridPos(0, 0);
+        return new BABYLON.Vector3(p.x, 1, p.z + 5);
     }
 
     function getTruckSpawnPos() {

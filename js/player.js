@@ -4,7 +4,7 @@
 const Player = (() => {
     let mesh = null;
     let scene = null;
-    const SPEED = 0.15;
+    const SPEED = 0.1125;
     const GRAVITY = -0.015;
     let velY = 0;
     let enabled = true;

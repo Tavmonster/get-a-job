@@ -4,12 +4,18 @@
 (function () {
     const canvas = document.getElementById("renderCanvas");
     const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
+    engine.setHardwareScalingLevel(1);
+    // Disable adaptive device ratio scaling — saves a recalculation each frame.
+    engine.adaptToDeviceRatio = false;
 
     function createScene() {
         const scene = new BABYLON.Scene(engine);
         scene.collisionsEnabled = true;
         scene.gravity = new BABYLON.Vector3(0, -0.015, 0);
         scene.clearColor = new BABYLON.Color4(0.53, 0.81, 0.98, 1); // sky blue
+
+        // Skip expensive full-scene pick on every mouse-move event.
+        scene.skipPointerMovePicking = true;
 
         // ── Lighting ────────────────────────────────────────────────
         const sun = new BABYLON.DirectionalLight("sun", new BABYLON.Vector3(-1, -2, -1), scene);
@@ -23,8 +29,8 @@
         // ── Fog ─────────────────────────────────────────────────────
         scene.fogMode = BABYLON.Scene.FOGMODE_LINEAR;
         scene.fogColor = new BABYLON.Color3(0.75, 0.88, 1.0);
-        scene.fogStart = 80;
-        scene.fogEnd   = 200;
+        scene.fogStart = 60;
+        scene.fogEnd   = 130;
 
         // ── Build world ─────────────────────────────────────────────
         World.build(scene);
@@ -62,10 +68,16 @@
         // ── NPC Cars ─────────────────────────────────────────────────
         NPCCars.init(scene);
 
+        // ── Block material dirty checks ──────────────────────────────
+        // All materials are fully initialized by now. Blocking the dirty
+        // mechanism stops Babylon scanning every material every frame.
+        scene.blockMaterialDirtyMechanism = true;
+
         // ── References to key trigger zones ─────────────────────────
-        const storeData  = World.getSpecialBuilding("store");
-        const depotData  = World.getSpecialBuilding("depot");
-        const hotelData  = World.getSpecialBuilding("hotel");
+        const storeData    = World.getSpecialBuilding("store");
+        const depotData    = World.getSpecialBuilding("depot");
+        const hotelData    = World.getSpecialBuilding("hotel");
+        const fastFoodData = World.getSpecialBuilding("fastfood");
 
         // ── State flags ─────────────────────────────────────────────
         let interactHintActive = "";
@@ -137,9 +149,15 @@
                     paydayReady = true;
                     break;
 
+                case GameState.STATES.FAST_FOOD:
+                    UI.showMission("Buy Food");
+                    UI.showText("You\'re starving! Spend $10 at Burger Barn before heading to the hotel.", 5000);
+                    if (fastFoodData) Minimap.setObjective(fastFoodData.trigger.position);
+                    break;
+
                 case GameState.STATES.HOTEL:
                     UI.showMission("Rest at Hotel");
-                    UI.showText("Nice work today. Head to the hotel to rest.", 4000);
+                    UI.showText("Belly full. Head to the hotel to rest.", 4000);
                     if (hotelData) Minimap.setObjective(hotelData.trigger.position);
                     break;
 
@@ -180,7 +198,7 @@
             NPCCars.update();
 
             // ── Walking states ──────────────────────────────────────
-            if (gs === S.WALK_TO_STORE || gs === S.PAYDAY || gs === S.HOTEL) {
+            if (gs === S.WALK_TO_STORE || gs === S.PAYDAY || gs === S.FAST_FOOD || gs === S.HOTEL) {
                 Player.update();
             }
 
@@ -291,12 +309,36 @@
                         UI.setMoney(100);
                         UI.showText("Manager: 'You did great today! Here is your first paycheck — $100!'", 5000);
                         setTimeout(() => {
-                            UI.showText("Now go find a hotel and get some rest.", 4000);
-                            GameState.set(S.HOTEL);
+                            UI.showText("Your stomach growls. Better grab some food first.", 4000);
+                            GameState.set(S.FAST_FOOD);
                         }, 5500);
                     }
                 } else {
                     if (interactHintActive === "manager") {
+                        UI.hideInteractHint();
+                        interactHintActive = "";
+                    }
+                }
+            }
+
+            // Fast food restaurant
+            if (gs === S.FAST_FOOD && fastFoodData) {
+                if (nearTrigger(playerPos, fastFoodData.trigger, 10)) {
+                    if (interactHintActive !== "fastfood") {
+                        UI.showInteractHint("Press E to buy a meal ($10)");
+                        interactHintActive = "fastfood";
+                    }
+                    if (Input.consumePress("KeyE")) {
+                        UI.hideInteractHint();
+                        interactHintActive = "";
+                        UI.setMoney(90);
+                        UI.showText("Mmm, a Burger Barn classic! That hit the spot. $90 left.", 4000);
+                        setTimeout(() => {
+                            GameState.set(S.HOTEL);
+                        }, 4500);
+                    }
+                } else {
+                    if (interactHintActive === "fastfood") {
                         UI.hideInteractHint();
                         interactHintActive = "";
                     }
@@ -314,8 +356,8 @@
                         Player.setEnabled(false);
                         UI.hideInteractHint();
                         interactHintActive = "";
-                        UI.setMoney(40);
-                        UI.showText("You pay $60 for a room and get some well-deserved rest. $40 left over.", 5000);
+                        UI.setMoney(30);
+                        UI.showText("You pay $60 for a room and get some well-deserved rest. $30 left over.", 5000);
                         setTimeout(() => UI.showEndScreen(true, () => location.reload()), 5500);
                     }
                 } else {
@@ -341,8 +383,18 @@
     // ── Resize handler ───────────────────────────────────────────────
     window.addEventListener("resize", () => engine.resize());
 
-    // ── Start render loop ────────────────────────────────────────────
-    engine.runRenderLoop(() => scene.render());
+    // ── Start render loop (manual 60 fps cap) ────────────────────────
+    // Babylon's runRenderLoop already uses requestAnimationFrame (display-rate
+    // capped), but adding an explicit time gate ensures we never burn CPU on
+    // displays/drivers that fire rAF faster than 60 Hz.
+    let _lastRender = 0;
+    const _frameMs  = 1000 / 60;
+    engine.runRenderLoop(() => {
+        // const now = performance.now();
+        // if (now - _lastRender < _frameMs) return;
+        // _lastRender = now;
+        scene.render();
+    });
 
     // ── Fix HIRED state score display (patch after interview completes) ─
     // The score is passed back via the interview callback; update the text.

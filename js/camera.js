@@ -8,9 +8,11 @@ const GameCamera = (() => {
 
     const RISE      = 11;   // height above target
     const BEHIND    = 13;   // distance behind target
-    // Inner face of boundary walls is at ±118.5 (halfMap=120 - 1.5).
-    // Clamp the camera to ±118 so it never enters the wall geometry.
     const WALL_INNER = 118;
+
+    // Pre-allocated vectors — avoids a new Vector3 allocation every frame.
+    const _camPos    = new BABYLON.Vector3();
+    const _lookAt    = new BABYLON.Vector3();
 
     function init(scene, targetMesh, cvs) {
         cvs.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -38,25 +40,23 @@ const GameCamera = (() => {
 
         const rot = target.rotation.y;
 
-        // Unit vector pointing in the direction the target faces
         const fwdX = Math.sin(rot);
         const fwdZ = Math.cos(rot);
 
         // Camera sits behind and above the target
-        camera.position.x = target.position.x - fwdX * BEHIND;
-        camera.position.y = target.position.y + RISE;
-        camera.position.z = target.position.z - fwdZ * BEHIND;
+        _camPos.x = target.position.x - fwdX * BEHIND;
+        _camPos.y = target.position.y + RISE;
+        _camPos.z = target.position.z - fwdZ * BEHIND;
 
         // Don't let the camera enter the boundary walls
-        camera.position.x = Math.max(-WALL_INNER, Math.min(WALL_INNER, camera.position.x));
-        camera.position.z = Math.max(-WALL_INNER, Math.min(WALL_INNER, camera.position.z));
+        _camPos.x = Math.max(-WALL_INNER, Math.min(WALL_INNER, _camPos.x));
+        _camPos.z = Math.max(-WALL_INNER, Math.min(WALL_INNER, _camPos.z));
+
+        camera.position.copyFrom(_camPos);
 
         // Look at a point at the target's chest height
-        camera.setTarget(new BABYLON.Vector3(
-            target.position.x,
-            target.position.y + 0.5,
-            target.position.z
-        ));
+        _lookAt.set(target.position.x, target.position.y + 0.5, target.position.z);
+        camera.setTarget(_lookAt);
     }
 
     function switchTarget(newTarget) {

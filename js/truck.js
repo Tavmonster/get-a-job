@@ -5,8 +5,8 @@ const Truck = (() => {
     let mesh = null;
     let scene = null;
     let driving = false;
-    const MAX_SPEED  = 0.24;
-    const ACCEL      = 0.010;
+    const MAX_SPEED  = 0.18;
+    const ACCEL      = 0.0075;
     const TURN_SPEED = 0.018;   // radians per frame at full speed
     let speed = 0;
 
