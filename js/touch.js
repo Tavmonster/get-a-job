@@ -98,11 +98,12 @@
     ].join(';');
     baseEl.appendChild(handleEl);
 
-    // Action / interact button.
+    // Action / interact button — sits just above the minimap (bottom-right).
+    // Minimap occupies right 22% × bottom 28% of the screen; place E above it.
     actionBtn = document.createElement('div');
     actionBtn.textContent = 'E';
     actionBtn.style.cssText = [
-        'position:fixed;bottom:40px;right:28px',
+        'position:fixed;right:calc(22% / 2 - 36px);bottom:calc(28% + 14px)',
         'width:72px;height:72px;border-radius:50%',
         'background:rgba(255,200,50,0.16);border:2px solid rgba(255,200,50,0.45)',
         'color:rgba(255,220,100,0.90);font-size:28px;font-weight:bold',
