@@ -93,9 +93,8 @@ const Cutscene = (() => {
         ],
 
         gameover: [
-            { speaker: "Manager", text: "\"I'm sorry, but that score doesn't meet our requirements.\"" },
-            { speaker: "Manager", text: "\"We need someone reliable behind the wheel.\n\nGood luck out there.\"" },
-            { speaker: "Narrator", text: "You walk out into the afternoon sun, empty-handed and deflated." },
+            { speaker: "Narrator", text: "The afternoon sun is warm on your face.\n\nYou stare up at the sky from the park bench." },
+            { speaker: "Narrator", text: "\"We need someone reliable.\"\n\nHis words drift through your mind." },
             { speaker: "Narrator", text: "Maybe next time you'll be better prepared." },
         ],
     };
@@ -1163,10 +1162,193 @@ const Cutscene = (() => {
         });
     }
 
+    // ── In-engine fail cutscene ────────────────────────────────────────
+    // Brief shot outside the store, then hard cut to bench — player lies down.
+    // storeData: World.getSpecialBuilding("store"); benchPos: Vector3 bench position.
+    function playFailCutscene(scene, playerMesh, cam, storeData, benchPos, onComplete) {
+        _active = true;
+
+        const SX      = storeData.pos.x;
+        const SZ      = storeData.pos.z;
+        const FRONT_Z = SZ - 7;   // south face of store (D=14, half=7)
+
+        const BX = benchPos.x;
+        const BZ = benchPos.z;
+
+        // ── Player rig nodes ──────────────────────────────────────────
+        const plyLegPivotL = scene.getNodeByName("legPivotL");
+        const plyLegPivotR = scene.getNodeByName("legPivotR");
+        const plyArmPivotL = scene.getNodeByName("armPivotL");
+        const plyArmPivotR = scene.getNodeByName("armPivotR");
+
+        // Reset limbs to rest
+        function resetLimbs() {
+            if (plyLegPivotL) plyLegPivotL.rotation.x = 0;
+            if (plyLegPivotR) plyLegPivotR.rotation.x = 0;
+            if (plyArmPivotL) plyArmPivotL.rotation.x = 0;
+            if (plyArmPivotR) plyArmPivotR.rotation.x = 0;
+        }
+
+        // ── Helpers ───────────────────────────────────────────────────
+        function eio(t) { return t < 0.5 ? 2*t*t : -1 + (4 - 2*t) * t; }
+        function clamp01(t) { return Math.max(0, Math.min(1, t)); }
+
+        const timers = [];
+        function sub(text, dur, delay) { timers.push(setTimeout(() => UI.showText(text, dur), delay)); }
+
+        let phase = 0;
+        const phases = [];
+
+        // Camera positions
+        // Shot A: side-angle in front of store door, looking at dejected player
+        const CAM_STORE_POS = new BABYLON.Vector3(SX - 5, 2.2, FRONT_Z - 4);
+        const CAM_STORE_TGT = new BABYLON.Vector3(SX,     1.5, FRONT_Z - 1);
+        // Shot B: close bench side-angle (mirrors intro)
+        const BENCH_A_POS   = new BABYLON.Vector3(BX + 7, 1.2, BZ - 3);
+        const BENCH_A_TGT   = new BABYLON.Vector3(BX,     0.9, BZ);
+        // Shot C: pull-back reveal
+        const BENCH_B_POS   = new BABYLON.Vector3(BX + 3, 5.5, BZ - 9);
+        const BENCH_B_TGT   = new BABYLON.Vector3(BX,     0.7, BZ);
+
+        // Phase 0 — brief shot outside store (1.2 s) ──────────────────
+        // Place player just outside the door, facing away (south / dejected)
+        // Restore child mesh visibility (hidden during in-store FPV)
+        playerMesh.getChildMeshes().forEach(m => { m.isVisible = true; });
+        playerMesh.position.set(SX, 1, FRONT_Z - 1.5);
+        playerMesh.rotation.y = Math.PI;
+        playerMesh.rotation.z = 0;
+        resetLimbs();
+
+        let p0e = 0;
+        phases.push((dt) => {
+            p0e += dt;
+            cam.position.copyFrom(CAM_STORE_POS);
+            cam.setTarget(CAM_STORE_TGT);
+            return p0e > 1200;
+        });
+
+        // Phase 1 — hard cut: teleport to bench, instant camera snap ──
+        // Runs for exactly one frame to reposition everything.
+        let p1done = false;
+        phases.push((_dt) => {
+            if (!p1done) {
+                p1done = true;
+                playerMesh.position.set(BX, 1, BZ);
+                playerMesh.rotation.y = 0;
+                playerMesh.rotation.z = 0;
+                resetLimbs();
+                cam.position.copyFrom(BENCH_A_POS);
+                cam.setTarget(BENCH_A_TGT);
+            }
+            return true;
+        });
+
+        // Phase 2 — lie-down animation (1.2 s) ────────────────────────
+        // Seat top = benchPos.y (0.75); cylinder radius = 0.3 → rest center at 1.05
+        const LIE_Y = benchPos.y + 0.3;
+        let p2e = 0;
+        phases.push((dt) => {
+            p2e += dt;
+            const t = clamp01(p2e / 1200);
+            playerMesh.rotation.z = eio(t) * 1.15;
+            playerMesh.position.y = 1.0 + (LIE_Y - 1.0) * eio(t);
+            cam.position.copyFrom(BENCH_A_POS);
+            cam.setTarget(BENCH_A_TGT);
+            return t >= 1;
+        });
+
+        // Phase 3 — hold close bench shot (1.2 s) ─────────────────────
+        let p3e = 0;
+        phases.push((dt) => {
+            p3e += dt;
+            cam.position.copyFrom(BENCH_A_POS);
+            cam.setTarget(BENCH_A_TGT);
+            return p3e > 1200;
+        });
+
+        // Phase 4 — pull back to park wide shot (1.5 s) ───────────────
+        let p4e = 0;
+        phases.push((dt) => {
+            p4e += dt;
+            const t = clamp01(p4e / 1500);
+            const s = eio(t);
+            cam.position.set(
+                BENCH_A_POS.x + (BENCH_B_POS.x - BENCH_A_POS.x) * s,
+                BENCH_A_POS.y + (BENCH_B_POS.y - BENCH_A_POS.y) * s,
+                BENCH_A_POS.z + (BENCH_B_POS.z - BENCH_A_POS.z) * s
+            );
+            cam.setTarget(new BABYLON.Vector3(
+                BENCH_A_TGT.x + (BENCH_B_TGT.x - BENCH_A_TGT.x) * s,
+                BENCH_A_TGT.y + (BENCH_B_TGT.y - BENCH_A_TGT.y) * s,
+                BENCH_A_TGT.z + (BENCH_B_TGT.z - BENCH_A_TGT.z) * s
+            ));
+            return t >= 1;
+        });
+
+        // Phase 5 — hold wide shot (0.8 s) ────────────────────────────
+        let p5e = 0;
+        phases.push((dt) => {
+            p5e += dt;
+            cam.position.copyFrom(BENCH_B_POS);
+            cam.setTarget(BENCH_B_TGT);
+            return p5e > 800;
+        });
+
+        // (no subtitles)
+
+        // ── Timed text ────────────────────────────────────────────────
+        sub('"Sorry, you didn\'t get the job."',  3500,   200);   // outside store
+        sub('You go back to the bench, tomorrow is another day.', 4500,  3200);   // after bench cut
+
+        // ── Finish ────────────────────────────────────────────────────
+        function finish() {
+            if (_done) return;
+            _done = true;
+            timers.forEach(id => clearTimeout(id));
+            document.removeEventListener('keydown', onSkipKey, true);
+            scene.onBeforeRenderObservable.remove(observer);
+            // Leave player lying on the bench
+            playerMesh.rotation.z = 1.15;
+            playerMesh.position.set(BX, LIE_Y, BZ);
+            if (plyLegPivotL) plyLegPivotL.rotation.x = 0;
+            if (plyLegPivotR) plyLegPivotR.rotation.x = 0;
+            if (plyArmPivotL) plyArmPivotL.rotation.x = 0;
+            if (plyArmPivotR) plyArmPivotR.rotation.x = 0;
+            _active = false;
+            if (onComplete) onComplete();
+        }
+        let _done = false;
+
+        function onSkipKey(e) {
+            if (e.code === 'Space' || e.code === 'Enter' || e.code === 'Escape') {
+                e.stopPropagation();
+                e.preventDefault();
+                finish();
+            }
+        }
+        document.addEventListener('keydown', onSkipKey, true);
+
+        // Safety: auto-finish after 15 s
+        const _safetyTimer = setTimeout(finish, 15000);
+        timers.push(_safetyTimer);
+
+        // ── Per-frame observer ─────────────────────────────────────────
+        let _lastT = performance.now();
+        const observer = scene.onBeforeRenderObservable.add(() => {
+            if (_done) return;
+            const now = performance.now();
+            const dt  = now - _lastT;
+            _lastT    = now;
+            if (phase >= phases.length) { finish(); return; }
+            const done = phases[phase](dt);
+            if (done) phase++;
+        });
+    }
+
     // ── Public: query active state ─────────────────────────────────────
     function isActive() {
         return _active;
     }
 
-    return { play, isActive, playIntroCutscene, playInterviewCutscene, playPaydayCutscene };
+    return { play, isActive, playIntroCutscene, playInterviewCutscene, playPaydayCutscene, playFailCutscene };
 })();

@@ -208,13 +208,10 @@
 
                 case GameState.STATES.GAME_OVER:
                     UI.showMission("");
-                    Player.setEnabled(false);
-                    Player.teleport(World.getPlayerSpawnPos());
-                    setTimeout(() => {
-                        Cutscene.play('gameover', () => {
-                            UI.showEndScreen(false, () => location.reload());
-                        });
-                    }, 800);
+                    Cutscene.playFailCutscene(scene, playerMesh, mainCamera, storeData, _benchPos, () => {
+                        Player.setEnabled(false);
+                        UI.showEndScreen(false, () => location.reload());
+                    });
                     break;
 
                 case GameState.STATES.JAILED:
