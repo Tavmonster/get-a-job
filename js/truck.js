@@ -183,5 +183,7 @@ const Truck = (() => {
         speed = 0;
     }
 
-    return { init, update, setDriving, setVisible, getMesh, isDrivingActive, resetToSpawn };
+    function getSpeed() { return Math.abs(speed); }
+
+    return { init, update, setDriving, setVisible, getMesh, isDrivingActive, getSpeed, resetToSpawn };
 })();

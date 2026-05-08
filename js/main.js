@@ -406,7 +406,9 @@
             PoliceCar.update();
 
             // Pedestrian hit: alert police when truck drives into an NPC
-            if (Truck.isDrivingActive() && !policeAlerted) {
+            // Require the truck to be moving (speed > 0.05) so stationary NPCs
+            // walking into a parked truck don't falsely trigger police.
+            if (Truck.isDrivingActive() && !policeAlerted && Truck.getSpeed() > 0.05) {
                 if (NPCSystem.checkTruckHit(truckPos.x, truckPos.z, 4.0)) {
                     policeAlerted = true;
                     PoliceCar.alert();
