@@ -644,6 +644,7 @@ const World = (() => {
         const doorMesh = BABYLON.MeshBuilder.CreateBox("storeDoor",
             { width: doorW, height: doorH, depth: 0.1 }, scene);
         doorMesh.material = mat(scene, COLOURS.door);
+        doorMesh.checkCollisions = true;
         // Offset so left edge aligns with pivot
         doorMesh.position.set(doorW / 2, doorH / 2, 0);
         doorMesh.parent = doorPivot;
