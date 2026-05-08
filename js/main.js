@@ -421,8 +421,11 @@
 
             // ── Store door animation ──────────────────────────────────────────────
             // Only runs during free play; the cutscene handles the door in its own phases.
-            // Door stays locked until the interview cutscene has finished.
-            const _doorUnlocked = gs !== S.INTRO && gs !== S.WALK_TO_STORE && gs !== S.INTERVIEW;
+            // Door stays locked until the interview cutscene has finished,
+            // and again during ReturnDepot/Payday to prevent the door from
+            // teleporting the player while they are inside the store.
+            const _doorUnlocked = gs !== S.INTRO && gs !== S.WALK_TO_STORE && gs !== S.INTERVIEW &&
+                gs !== S.RETURN_DEPOT && gs !== S.PAYDAY;
             if (storeData && storeData.doorPivot && _doorUnlocked) {
                 const _ddx = playerPos.x - storeData.pos.x;
                 const _ddz = playerPos.z - (storeData.pos.z - 7);
