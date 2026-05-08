@@ -714,6 +714,323 @@ const Cutscene = (() => {
         });
     }
 
+    // ── In-engine payday cutscene ─────────────────────────────────────
+    // Player walks into the store, manager hands over paycheck envelope,
+    // player pockets it and exits.
+    function playPaydayCutscene(scene, playerMesh, cam, storeData, onComplete) {
+        _active = true;
+
+        const SX = storeData.pos.x;
+        const SZ = storeData.pos.z;
+        const D  = 14;
+
+        const FRONT_Z   = SZ - D / 2;        // south face Z
+        const DOOR_OPEN = -Math.PI / 2;
+
+        // Aisle route the manager uses to come around the counter
+        const AISLE_X   = SX - 5.5;
+        const GAP_S     = SZ - 4.0;
+        const GAP_N     = SZ - 1.2;
+
+        // Meeting positions (both north of the walk-in stop SZ-5.5 so player always moves forward)
+        // Counter south face = SZ - 2.5 - 0.7 = SZ - 3.2, so manager must stay at SZ - 3.6 or less
+        const MEET_PLY_Z = SZ - 4.5;   // 2.5 units inside the door
+        const MEET_MGR_Z = SZ - 3.7;   // just south of counter face (SZ-3.2), 0.5 unit buffer
+
+        // ── Manager NPC ───────────────────────────────────────────────
+        const {
+            root: mgrMesh,
+            legPivotL: mgrLegPivotL, legPivotR: mgrLegPivotR,
+            disposeAll: disposeMgr,
+        } = buildSimpleCharacter(scene, {
+            skin:  [0.75, 0.60, 0.45],
+            hair:  [0.12, 0.08, 0.04],
+            shirt: [0.15, 0.35, 0.65],
+            pants: [0.18, 0.18, 0.22],
+        });
+        mgrMesh.position.set(SX + 2, 1, SZ - 1.3);
+        mgrMesh.rotation.y = 0;
+
+        // ── Paycheck envelope ─────────────────────────────────────────
+        const envelope = BABYLON.MeshBuilder.CreateBox(
+            "cs_envelope", { width: 0.30, height: 0.02, depth: 0.22 }, scene);
+        const envMat = new BABYLON.StandardMaterial("cs_envMat_" + Math.random(), scene);
+        envMat.diffuseColor  = new BABYLON.Color3(0.95, 0.90, 0.68);
+        envMat.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+        envelope.material = envMat;
+        envelope.setEnabled(false);
+
+        // ── Place player at approach position ─────────────────────────
+        playerMesh.position.set(SX, 1, FRONT_Z - 2.5);
+        playerMesh.rotation.y = 0;
+        playerMesh.rotation.z = 0;
+
+        // Player rig arm nodes
+        const plyArmPivotR = scene.getNodeByName("armPivotR");
+
+        // ── Helpers ───────────────────────────────────────────────────
+        function eio(t)  { return t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t; }
+        function clamp01(t) { return Math.max(0, Math.min(1, t)); }
+        function moveToward(mesh, tx, tz, speed, dt) {
+            const dx = tx - mesh.position.x;
+            const dz = tz - mesh.position.z;
+            const dist = Math.sqrt(dx * dx + dz * dz);
+            const step = speed * dt;
+            if (dist <= step) { mesh.position.x = tx; mesh.position.z = tz; return true; }
+            mesh.position.x += (dx / dist) * step;
+            mesh.position.z += (dz / dist) * step;
+            mesh.rotation.y  = Math.atan2(dx, dz);
+            return false;
+        }
+        function makeWalker(mesh, pts, speed) {
+            let i = 0;
+            return function(dt) {
+                if (i >= pts.length) return true;
+                if (moveToward(mesh, pts[i].x, pts[i].z, speed, dt)) i++;
+                return i >= pts.length;
+            };
+        }
+
+        // Single eyeHeight variable — lerped smoothly to avoid camera snaps
+        const EYE_STAND = 1.65;
+        const EYE_FACE  = 0.60;  // head centre is +0.60 above mesh root — look straight across
+        let   eyeHeight = EYE_STAND;
+
+        function fpvForward() {
+            const ey = playerMesh.position.y + eyeHeight;
+            cam.position.set(playerMesh.position.x, ey, playerMesh.position.z);
+            const fx = Math.sin(playerMesh.rotation.y);
+            const fz = Math.cos(playerMesh.rotation.y);
+            cam.setTarget(new BABYLON.Vector3(
+                playerMesh.position.x + fx * 8, ey - 0.1,
+                playerMesh.position.z + fz * 8));
+        }
+        function fpvLookAt(tx, ty, tz) {
+            const ey = playerMesh.position.y + eyeHeight;
+            cam.position.set(playerMesh.position.x, ey, playerMesh.position.z);
+            cam.setTarget(new BABYLON.Vector3(tx, ty, tz));
+        }
+
+        const WALK_SPEED = 0.0036;
+        let phase = 0;
+        const phases = [];
+        const timers = [];
+        function sub(text, dur, delay) { timers.push(setTimeout(() => UI.showText(text, dur), delay)); }
+
+        // Phase 0 — pause outside, look toward store front ─────────────
+        // ~1200 ms  cumulative: 0→1200
+        let p0e = 0;
+        phases.push((dt) => {
+            p0e += dt;
+            fpvLookAt(SX, 1.5, FRONT_Z);
+            return p0e > 1200;
+        });
+
+        // Phase 1 — door swings open ─────────────────────────────────
+        // ~800 ms  cumulative: 1200→2000
+        const p1DoorStart = storeData.doorPivot ? storeData.doorPivot.rotation.y : 0;
+        let p1e = 0;
+        phases.push((dt) => {
+            p1e += dt;
+            const t = clamp01(p1e / 800);
+            if (storeData.doorPivot)
+                storeData.doorPivot.rotation.y = p1DoorStart + (DOOR_OPEN - p1DoorStart) * eio(t);
+            fpvLookAt(SX, 1.5, FRONT_Z);
+            return t >= 1;
+        });
+
+        // Phase 2 — player walks in; door stays open ──────────────────
+        // ~1111 ms  cumulative: 2000→3111
+        phases.push((dt) => {
+            const arrived = moveToward(playerMesh, SX, FRONT_Z + 1.5, WALK_SPEED, dt);
+            fpvForward();
+            return arrived;
+        });
+
+        // Phase 2.5 — door closes behind player (door is behind camera, not visible)
+        // ~600 ms  cumulative: 3111→3711
+        let p2de = 0;
+        phases.push((dt) => {
+            p2de += dt;
+            const t = clamp01(p2de / 600);
+            if (storeData.doorPivot)
+                storeData.doorPivot.rotation.y = DOOR_OPEN * (1 - eio(t));
+            fpvForward();
+            return t >= 1;
+        });
+
+        // Phase 3 — manager walks around counter to meet player ────────
+        // ~5500 ms  cumulative: 3711→8611 (route: behind counter → west aisle → south floor)
+        const mgrWalk3 = makeWalker(mgrMesh, [
+            { x: AISLE_X, z: GAP_N      },
+            { x: AISLE_X, z: GAP_S      },
+            { x: SX,      z: MEET_MGR_Z },
+        ], WALK_SPEED * 0.9);
+        let p3e = 0;
+        phases.push((dt) => {
+            p3e += dt;
+            const done = mgrWalk3(dt);
+            fpvLookAt(mgrMesh.position.x, mgrMesh.position.y + 0.55, mgrMesh.position.z);
+            return done && p3e > 600;
+        });
+
+        // Phase 4 — player walks forward to meet manager; eye height lerps down
+        // ~278 ms  cumulative: 8611→8889
+        let p4e = 0;
+        phases.push((dt) => {
+            p4e += dt;
+            // Begin lowering eye height so it's already transitioning before phase 5
+            eyeHeight = EYE_STAND + (EYE_FACE - EYE_STAND) * eio(clamp01(p4e / 600));
+            const arrived = moveToward(playerMesh, SX, MEET_PLY_Z, WALK_SPEED, dt);
+            fpvForward();
+            return arrived;
+        });
+
+        // Phase 5 — face each other; finish eye lerp; manager raises envelope
+        // ~1200 ms  cumulative: 8889→10089
+        let p5e = 0;
+        phases.push((dt) => {
+            p5e += dt;
+            const t = clamp01(p5e / 1200);
+            eyeHeight = EYE_STAND + (EYE_FACE - EYE_STAND) * eio(Math.min(1, (p4e + p5e) / 600));
+            playerMesh.rotation.y = 0;        // faces north (toward manager)
+            mgrMesh.rotation.y    = Math.PI;  // faces south (toward player)
+
+            if (t > 0.2) {
+                envelope.setEnabled(true);
+                const raise = eio(clamp01((t - 0.2) / 0.8));
+                envelope.position.set(
+                    mgrMesh.position.x,
+                    mgrMesh.position.y + 0.55 + raise * 0.35,
+                    mgrMesh.position.z + 0.38
+                );
+                envelope.rotation.x = -raise * 0.45;
+            }
+            fpvLookAt(mgrMesh.position.x, mgrMesh.position.y + 0.65, mgrMesh.position.z);
+            return t >= 1;
+        });
+
+        // Phase 6 — player reaches for envelope; it travels to player ──
+        // ~1100 ms  cumulative: 10089→11189
+        let p6e = 0;
+        phases.push((dt) => {
+            p6e += dt;
+            const t = clamp01(p6e / 1100);
+            if (plyArmPivotR) plyArmPivotR.rotation.x = -eio(t) * 0.75;
+
+            const ex0 = mgrMesh.position.x;
+            const ez0 = mgrMesh.position.z + 0.38;
+            const ey0 = mgrMesh.position.y + 0.90;
+            const ex1 = playerMesh.position.x + 0.28;  // right-hand side
+            const ez1 = playerMesh.position.z + 0.38;
+            const ey1 = playerMesh.position.y + 0.30;  // hand/chest height (+0.12 arm centre, +0.18 tips)
+            envelope.position.set(
+                ex0 + (ex1 - ex0) * eio(t),
+                ey0 + (ey1 - ey0) * eio(t),
+                ez0 + (ez1 - ez0) * eio(t)
+            );
+            fpvLookAt(mgrMesh.position.x, mgrMesh.position.y + 0.65, mgrMesh.position.z);
+            return t >= 1;
+        });
+
+        // Phase 7 — player pockets envelope (arm returns, envelope hides)
+        // ~1100 ms  cumulative: 11189→12289
+        let p7e = 0;
+        phases.push((dt) => {
+            p7e += dt;
+            const t = clamp01(p7e / 900);
+            if (plyArmPivotR) plyArmPivotR.rotation.x = -0.75 * (1 - eio(t));
+            if (t > 0.45) envelope.setEnabled(false);
+            fpvLookAt(mgrMesh.position.x, mgrMesh.position.y + 0.65, mgrMesh.position.z);
+            return p7e > 1100;
+        });
+
+        // Phase 8 — player walks out; door opens ahead of them ────────
+        // Door opens first (500 ms), player walks all the way outside (~1667 ms for 6 units)
+        // cumulative: 12289→13956.  Door open starts at 12289, player reaches door at ~12956.
+        let p8e = 0;
+        phases.push((dt) => {
+            p8e += dt;
+            // Smooth eye height back to standing before player exits
+            eyeHeight = EYE_FACE + (EYE_STAND - EYE_FACE) * eio(clamp01(p8e / 700));
+            // Open door early so it's clear before the player reaches it
+            if (storeData.doorPivot)
+                storeData.doorPivot.rotation.y = DOOR_OPEN * eio(clamp01(p8e / 500));
+            const arrived = moveToward(playerMesh, SX, FRONT_Z - 2.5, WALK_SPEED, dt);
+            fpvForward();
+            return arrived;
+        });
+
+        // Phase 9 — door swings closed behind player ──────────────────
+        // ~600 ms  cumulative: 13956→14556
+        let p9e = 0;
+        phases.push((dt) => {
+            p9e += dt;
+            const t = clamp01(p9e / 600);
+            if (storeData.doorPivot)
+                storeData.doorPivot.rotation.y = DOOR_OPEN * (1 - eio(t));
+            fpvForward();
+            return t >= 1;
+        });
+
+        // Phase 10 — brief pause before callback ──────────────────────
+        let p10e = 0;
+        phases.push((dt) => {
+            p10e += dt;
+            return p10e > 500;
+        });
+
+        // ── Subtitle schedule ─────────────────────────────────────────
+        // Cumulative timings: p0=1200 p1=2000 p2=3111 p2.5=3711
+        // p3≈8611 p4≈8889 p5≈10089 p6≈11189 p7≈12289 p8≈13956 p9≈14556 p10≈15056
+        sub("You head back to collect your pay...",              2200,   400);
+        sub("The manager walks out to meet you.",                3000,  3800);
+        sub("\"Not bad for a first day.\"",                      2200,  8800);
+        sub("\"$100 cash — don't spend it all in one place.\"",  2400, 10200);
+        sub("You pocket the bills.",                             2000, 12000);
+
+        // ── Finish ─────────────────────────────────────────────────────
+        function finish() {
+            if (_done) return;
+            _done = true;
+            timers.forEach(id => clearTimeout(id));
+            UI.showText(' ', 1);   // clear any in-progress subtitle immediately
+            document.removeEventListener('keydown', onSkipKey, true);
+            scene.onBeforeRenderObservable.remove(observer);
+            playerMesh.position.y = 1;
+            eyeHeight = EYE_STAND;
+            if (plyArmPivotR) plyArmPivotR.rotation.x = 0;
+            envelope.dispose();
+            disposeMgr();
+            _active = false;
+            if (onComplete) onComplete();
+        }
+        let _done = false;
+
+        function onSkipKey(e) {
+            if (e.code === 'Space' || e.code === 'Enter' || e.code === 'Escape') {
+                e.stopPropagation();
+                e.preventDefault();
+                finish();
+            }
+        }
+        document.addEventListener('keydown', onSkipKey, true);
+
+        const _safetyTimer = setTimeout(finish, 25000);
+        timers.push(_safetyTimer);
+
+        let _lastT = performance.now();
+        const observer = scene.onBeforeRenderObservable.add(() => {
+            if (_done) return;
+            const now = performance.now();
+            const dt  = now - _lastT;
+            _lastT    = now;
+            if (phase >= phases.length) { finish(); return; }
+            const done = phases[phase](dt);
+            if (done) phase++;
+        });
+    }
+
     // ── In-engine intro cutscene ───────────────────────────────────────
     // Animates the Babylon.js camera and player mesh directly — no DOM card.
     // benchPos: world-space Vector3 of the bench seat surface (passed from main.js).
@@ -851,5 +1168,5 @@ const Cutscene = (() => {
         return _active;
     }
 
-    return { play, isActive, playIntroCutscene, playInterviewCutscene };
+    return { play, isActive, playIntroCutscene, playInterviewCutscene, playPaydayCutscene };
 })();

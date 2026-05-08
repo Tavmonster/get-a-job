@@ -419,7 +419,9 @@
 
             // ── Store door animation ──────────────────────────────────────────────
             // Only runs during free play; the cutscene handles the door in its own phases.
-            if (storeData && storeData.doorPivot) {
+            // Door stays locked until the interview cutscene has finished.
+            const _doorUnlocked = gs !== S.INTRO && gs !== S.WALK_TO_STORE && gs !== S.INTERVIEW;
+            if (storeData && storeData.doorPivot && _doorUnlocked) {
                 const _ddx = playerPos.x - storeData.pos.x;
                 const _ddz = playerPos.z - (storeData.pos.z - 7);
                 const _nearDoor = Math.abs(_ddx) < 4 && _ddz > -3 && _ddz < 3;
@@ -582,10 +584,17 @@
                         paydayReady = false;
                         UI.hideInteractHint();
                         interactHintActive = "";
-                        Cutscene.play('payday', () => {
-                            UI.setMoney(100);
-                            GameState.set(S.FAST_FOOD);
-                        });
+                        Cutscene.playPaydayCutscene(
+                            scene, playerMesh, GameCamera.getCamera(),
+                            storeData,
+                            () => {
+                                UI.setMoney(100);
+                                GameCamera.switchTarget(playerMesh);
+                                // Delay one tick so the cutscene's text-clear fires
+                                // before the FAST_FOOD state entry shows new text
+                                setTimeout(() => GameState.set(S.FAST_FOOD), 50);
+                            }
+                        );
                     }
                 } else {
                     if (interactHintActive === "manager") {
@@ -604,7 +613,8 @@
                     }
                     if (Input.consumePress("KeyE")) {
                         UI.hideInteractHint();
-                        interactHintActive = "";
+                        // Keep interactHintActive = "fastfood" so the hint doesn't
+                        // re-appear on the next frame while the cutscene is playing.
                         Cutscene.play('fastfood', () => {
                             hunger = 100;
                             UI.setHunger(hunger);
