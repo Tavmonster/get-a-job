@@ -284,13 +284,15 @@ const UI = (() => {
             'position:fixed;top:0;left:0;width:100%;height:100%',
             'background:rgba(0,0,0,0.82)',
             'display:flex;align-items:center;justify-content:center',
-            'z-index:100;font-family:Arial,sans-serif',
+            'z-index:150;font-family:Arial,sans-serif',
+            'padding:12px;box-sizing:border-box',
         ].join(';');
 
         const card = document.createElement('div');
         card.style.cssText = [
             'background:#1a1a2e;border:2px solid #4a90e2;border-radius:12px',
-            'padding:28px 32px;width:680px;max-width:90vw;box-sizing:border-box;color:white',
+            'padding:20px;width:680px;max-width:100%;max-height:90vh',
+            'box-sizing:border-box;color:white;overflow-y:auto',
         ].join(';');
         overlay.appendChild(card);
         document.body.appendChild(overlay);
@@ -309,22 +311,22 @@ const UI = (() => {
             card.innerHTML = '';
 
             const header = document.createElement('div');
-            header.style.cssText = 'color:#4a90e2;font-size:22px;text-align:center;margin-bottom:8px';
+            header.style.cssText = 'color:#4a90e2;font-size:18px;text-align:center;margin-bottom:6px';
             header.textContent = 'Job Interview — Delivery Driver';
             card.appendChild(header);
 
             const progress = document.createElement('div');
-            progress.style.cssText = 'color:#aaa;font-size:16px;text-align:center;margin-bottom:16px';
+            progress.style.cssText = 'color:#aaa;font-size:14px;text-align:center;margin-bottom:12px';
             progress.textContent = `Question ${questionIndex + 1} of ${questions.length}  |  Score: ${score}`;
             card.appendChild(progress);
 
             const qText = document.createElement('div');
-            qText.style.cssText = 'font-size:20px;margin-bottom:16px;min-height:60px';
+            qText.style.cssText = 'font-size:17px;margin-bottom:12px;line-height:1.4';
             qText.textContent = q.question;
             card.appendChild(qText);
 
             const feedback = document.createElement('div');
-            feedback.style.cssText = 'height:32px;font-size:18px;margin-top:8px';
+            feedback.style.cssText = 'min-height:28px;font-size:15px;margin-top:6px';
             card.appendChild(feedback);
 
             q.choices.forEach((choice, idx) => {
@@ -332,9 +334,9 @@ const UI = (() => {
                 btn.textContent = choice;
                 btn.style.cssText = [
                     'display:block;width:100%;margin-bottom:8px',
-                    'padding:10px 14px;background:#2c3e50;color:white',
+                    'padding:10px 12px;background:#2c3e50;color:white',
                     'border:1px solid #555;border-radius:6px',
-                    'font-size:17px;cursor:pointer;text-align:left',
+                    'font-size:15px;cursor:pointer;text-align:left;line-height:1.3',
                 ].join(';');
                 btn.addEventListener('mouseover', () => { btn.style.background = '#3d5166'; });
                 btn.addEventListener('mouseout',  () => { if (!btn.disabled) btn.style.background = '#2c3e50'; });
