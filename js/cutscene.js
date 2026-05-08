@@ -665,15 +665,16 @@ const Cutscene = (() => {
         sub("You take a seat across the desk.",                   3000, 14000);
         sub("\"Alright. Let's begin.\"",                          3000, 16500);
 
-        // ── Skip button (keyboard hint on desktop, tappable on mobile) ────────
+        // ── Skip: tappable button on mobile, invisible keyboard hint on desktop ────
+        const _isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
         const skipHint = document.createElement('div');
-        skipHint.textContent = 'Skip';
+        skipHint.textContent = _isTouch ? 'Skip' : 'SPACE / ESC  to skip';
         skipHint.style.cssText = [
             'position:fixed;bottom:20px;right:22px',
-            'color:rgba(255,255,255,0.55);font-size:15px',
-            'font-family:Arial,sans-serif;z-index:200',
-            'background:rgba(0,0,0,0.45);border:1px solid rgba(255,255,255,0.25)',
-            'border-radius:6px;padding:8px 18px;cursor:pointer;letter-spacing:1px',
+            _isTouch
+                ? 'color:rgba(255,255,255,0.55);font-size:15px;background:rgba(0,0,0,0.45);border:1px solid rgba(255,255,255,0.25);border-radius:6px;padding:8px 18px;cursor:pointer'
+                : 'color:rgba(255,255,255,0.32);font-size:13px;pointer-events:none',
+            'font-family:Arial,sans-serif;z-index:200;letter-spacing:1px',
         ].join(';');
         document.body.appendChild(skipHint);
 
@@ -779,15 +780,16 @@ const Cutscene = (() => {
             setTimeout(() => UI.showText("Gotta do something about it.",    4000), 11000),
         ];
 
-        // ── Skip button (keyboard hint on desktop, tappable on mobile) ────────
+        // ── Skip: tappable button on mobile, invisible keyboard hint on desktop ────
+        const _isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
         const skipHint = document.createElement('div');
-        skipHint.textContent = 'Skip';
+        skipHint.textContent = _isTouch ? 'Skip' : 'SPACE / ESC  to skip';
         skipHint.style.cssText = [
             'position:fixed;bottom:20px;right:22px',
-            'color:rgba(255,255,255,0.55);font-size:15px',
-            'font-family:Arial,sans-serif;z-index:200',
-            'background:rgba(0,0,0,0.45);border:1px solid rgba(255,255,255,0.25)',
-            'border-radius:6px;padding:8px 18px;cursor:pointer;letter-spacing:1px',
+            _isTouch
+                ? 'color:rgba(255,255,255,0.55);font-size:15px;background:rgba(0,0,0,0.45);border:1px solid rgba(255,255,255,0.25);border-radius:6px;padding:8px 18px;cursor:pointer'
+                : 'color:rgba(255,255,255,0.32);font-size:13px;pointer-events:none',
+            'font-family:Arial,sans-serif;z-index:200;letter-spacing:1px',
         ].join(';');
         document.body.appendChild(skipHint);
 
