@@ -665,29 +665,13 @@ const Cutscene = (() => {
         sub("You take a seat across the desk.",                   3000, 14000);
         sub("\"Alright. Let's begin.\"",                          3000, 16500);
 
-        // ── Skip: tappable button on mobile, invisible keyboard hint on desktop ────
-        const _isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
-        const skipHint = document.createElement('div');
-        skipHint.textContent = _isTouch ? 'Skip' : 'SPACE / ESC  to skip';
-        skipHint.style.cssText = [
-            'position:fixed;bottom:20px;right:22px',
-            _isTouch
-                ? 'color:rgba(255,255,255,0.55);font-size:15px;background:rgba(0,0,0,0.45);border:1px solid rgba(255,255,255,0.25);border-radius:6px;padding:8px 18px;cursor:pointer'
-                : 'color:rgba(255,255,255,0.32);font-size:13px;pointer-events:none',
-            'font-family:Arial,sans-serif;z-index:200;letter-spacing:1px',
-        ].join(';');
-        document.body.appendChild(skipHint);
-
         // ── Finish ─────────────────────────────────────────────────────
         function finish() {
             if (_done) return;
             _done = true;
             timers.forEach(id => clearTimeout(id));
             document.removeEventListener('keydown', onSkipKey, true);
-            skipHint.removeEventListener('click', finish);
-            skipHint.removeEventListener('touchend', finish);
             scene.onBeforeRenderObservable.remove(observer);
-            if (document.body.contains(skipHint)) document.body.removeChild(skipHint);
             // Reset player transforms
             playerMesh.position.y = 1;
             mgrMesh.position.y    = 1;
@@ -709,8 +693,6 @@ const Cutscene = (() => {
             }
         }
         document.addEventListener('keydown', onSkipKey, true);
-        skipHint.addEventListener('click', finish);
-        skipHint.addEventListener('touchend', (e) => { e.preventDefault(); finish(); });
 
         // ── Per-frame observer ─────────────────────────────────────────
         let _lastT = performance.now();
@@ -780,19 +762,6 @@ const Cutscene = (() => {
             setTimeout(() => UI.showText("Gotta do something about it.",    4000), 11000),
         ];
 
-        // ── Skip: tappable button on mobile, invisible keyboard hint on desktop ────
-        const _isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
-        const skipHint = document.createElement('div');
-        skipHint.textContent = _isTouch ? 'Skip' : 'SPACE / ESC  to skip';
-        skipHint.style.cssText = [
-            'position:fixed;bottom:20px;right:22px',
-            _isTouch
-                ? 'color:rgba(255,255,255,0.55);font-size:15px;background:rgba(0,0,0,0.45);border:1px solid rgba(255,255,255,0.25);border-radius:6px;padding:8px 18px;cursor:pointer'
-                : 'color:rgba(255,255,255,0.32);font-size:13px;pointer-events:none',
-            'font-family:Arial,sans-serif;z-index:200;letter-spacing:1px',
-        ].join(';');
-        document.body.appendChild(skipHint);
-
         // ── Shared finish logic ───────────────────────────────────────
         function finish() {
             if (done) return;
@@ -800,10 +769,7 @@ const Cutscene = (() => {
 
             timers.forEach(id => clearTimeout(id));
             document.removeEventListener('keydown', onSkipKey, true);
-            skipHint.removeEventListener('click', finish);
-            skipHint.removeEventListener('touchend', finish);
             scene.onBeforeRenderObservable.remove(observer);
-            if (document.body.contains(skipHint)) document.body.removeChild(skipHint);
 
             // Stand the player up (GameCamera.update() will take over next frame)
             playerMesh.rotation.z = 0;
@@ -823,8 +789,6 @@ const Cutscene = (() => {
             }
         }
         document.addEventListener('keydown', onSkipKey, true);
-        skipHint.addEventListener('click', finish);
-        skipHint.addEventListener('touchend', (e) => { e.preventDefault(); finish(); });
 
         // ── Per-frame observer ────────────────────────────────────────
         const observer = scene.onBeforeRenderObservable.add(() => {

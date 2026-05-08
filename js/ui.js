@@ -81,14 +81,24 @@ const UI = (() => {
         hudText.alpha = 0;
         advTexture.addControl(hudText);
 
-        // ── Hunger bar (top-left, row 3) ────────────────────────────────
+        // ── Hunger bar (top-left, row 3 on desktop; above joystick on mobile) ──────
+        const _touchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
         hungerRow = new BABYLON.GUI.StackPanel("hungerRow");
         hungerRow.isVertical = false;
-        hungerRow.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
-        hungerRow.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
         hungerRow.height = "30px";
-        hungerRow.left = "16px";
-        hungerRow.top = "82px";
+        if (_touchDevice) {
+            // On mobile, sit above the virtual joystick (bottom:~166px) so it
+            // doesn't overlap the narrative text in landscape.
+            hungerRow.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_BOTTOM;
+            hungerRow.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+            hungerRow.top = "-170px";
+            hungerRow.left = "16px";
+        } else {
+            hungerRow.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
+            hungerRow.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+            hungerRow.left = "16px";
+            hungerRow.top = "82px";
+        }
         hungerRow.alpha = 1;
         advTexture.addControl(hungerRow);
 
@@ -286,6 +296,9 @@ const UI = (() => {
             'display:flex;align-items:center;justify-content:center',
             'z-index:150;font-family:Arial,sans-serif',
             'padding:12px;box-sizing:border-box',
+            // Restore touch handling for this overlay — overrides body touch-action:none
+            // which on iOS Safari would otherwise suppress click events on buttons.
+            'touch-action:auto',
         ].join(';');
 
         const card = document.createElement('div');
@@ -340,7 +353,8 @@ const UI = (() => {
                 ].join(';');
                 btn.addEventListener('mouseover', () => { btn.style.background = '#3d5166'; });
                 btn.addEventListener('mouseout',  () => { if (!btn.disabled) btn.style.background = '#2c3e50'; });
-                btn.addEventListener('click', () => {
+                function _handleAnswer() {
+                    if (btn.disabled) return;
                     const correct = idx === q.correct;
                     if (correct) {
                         score++;
@@ -358,7 +372,10 @@ const UI = (() => {
                         questionIndex++;
                         loadQuestion();
                     }, 1400);
-                });
+                }
+                btn.addEventListener('click', _handleAnswer);
+                // touchend fires reliably on iOS even when body has touch-action:none
+                btn.addEventListener('touchend', (e) => { e.preventDefault(); _handleAnswer(); });
                 card.insertBefore(btn, feedback);
             });
         }
