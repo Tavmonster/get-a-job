@@ -287,7 +287,7 @@ const UI = (() => {
 
         if (typeof Minimap !== 'undefined') Minimap.hide();
         // Release cursor so the player can click answer buttons
-        document.exitPointerLock();
+        document.exitPointerLock?.();
 
         const overlay = document.createElement('div');
         overlay.style.cssText = [
@@ -315,7 +315,7 @@ const UI = (() => {
                 document.body.removeChild(overlay);
                 if (typeof Minimap !== 'undefined') Minimap.show();
                 // Re-lock cursor now that the quiz is done
-                document.getElementById('renderCanvas')?.requestPointerLock();
+                document.getElementById('renderCanvas')?.requestPointerLock?.();
                 onComplete(score >= PASS_THRESHOLD, score, questions.length);
                 return;
             }

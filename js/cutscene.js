@@ -122,7 +122,7 @@ const Cutscene = (() => {
 
         _active = true;
         // Release the cursor so the user can click slide buttons
-        document.exitPointerLock();
+        document.exitPointerLock?.();
         let index   = 0;
         let typing  = false;
         let typeTimer = null;
@@ -305,7 +305,7 @@ const Cutscene = (() => {
             setTimeout(() => {
                 if (document.body.contains(overlay)) document.body.removeChild(overlay);
                 // Re-lock the cursor now that the overlay is gone
-                document.getElementById('renderCanvas')?.requestPointerLock();
+                document.getElementById('renderCanvas')?.requestPointerLock?.();
                 if (onComplete) onComplete();
             }, 310);
         }

@@ -56,11 +56,11 @@
         let _lockReleasedByOverlay = false;
 
         function lockPointer() {
-            if (document.pointerLockElement !== canvas) canvas.requestPointerLock();
+            if (document.pointerLockElement !== canvas) canvas.requestPointerLock?.();
         }
         function releasePointerLock() {
             _lockReleasedByOverlay = true;
-            document.exitPointerLock();
+            document.exitPointerLock?.();
         }
 
         // When lock is lost (Esc or exitPointerLock), only auto-relock if WE
