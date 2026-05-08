@@ -267,12 +267,15 @@ const World = (() => {
 
     // ── Park ─────────────────────────────────────────────────────────
     function buildPark(scene, pos, col, row) {
-        // Each park cell gets its own grass tile, correctly centred
-        const grass = BABYLON.MeshBuilder.CreateGround("parkGrass_" + col + "_" + row, {
-            width: BLOCK - 2, height: BLOCK - 2,
-        }, scene);
-        grass.position.set(pos.x, 0.02, pos.z);
-        grass.material = mat(scene, COLOURS.parkGrass);
+        // Single combined grass tile built once (col=0, row=0), sized to cover
+        // all 4 park cells AND the internal roads that run between them.
+        if (col === 0 && row === 0) {
+            const grass = BABYLON.MeshBuilder.CreateGround("parkGrass", {
+                width: BLOCK * 2 - 2, height: BLOCK * 2 - 2,
+            }, scene);
+            grass.position.set(pos.x + BLOCK / 2, 0.02, pos.z + BLOCK / 2);
+            grass.material = mat(scene, COLOURS.parkGrass);
+        }
 
         // All park features built once from the first cell.
         // Roads run at half-BLOCK offsets (x=-75, z=-75 between these cells),
@@ -569,20 +572,93 @@ const World = (() => {
     // ── Store ─────────────────────────────────────────────────────────
     function buildStore(scene, pos) {
         const w = 14, h = 8, d = 14;
+        const SX = pos.x, SZ = pos.z;
 
-        const bld = BABYLON.MeshBuilder.CreateBox("store", { width: w, height: h, depth: d }, scene);
-        bld.position.set(pos.x, h / 2, pos.z);
-        bld.material = mat(scene, COLOURS.store);
-        bld.checkCollisions = true;
+        // ── Exterior shell — split into 5 wall planes so the front has a doorway ──
+        const wallMat  = mat(scene, COLOURS.store);
+        const floorMat = mat(scene, "#c8b89a");
+        const ceilMat  = mat(scene, "#ddd0b8");
+
+        // Back wall (north) — 1.0 deep so ellipsoid (r=0.4) can't tunnel through
+        const wallN = BABYLON.MeshBuilder.CreateBox("storeWallN", { width: w, height: h, depth: 1.0 }, scene);
+        wallN.position.set(SX, h / 2, SZ + d / 2 + 0.35);
+        wallN.material = wallMat;
+        wallN.checkCollisions = true;
+
+        // Left wall (west)
+        const wallW = BABYLON.MeshBuilder.CreateBox("storeWallW", { width: 1.0, height: h, depth: d }, scene);
+        wallW.position.set(SX - w / 2 - 0.35, h / 2, SZ);
+        wallW.material = wallMat;
+        wallW.checkCollisions = true;
+
+        // Right wall (east)
+        const wallE = BABYLON.MeshBuilder.CreateBox("storeWallE", { width: 1.0, height: h, depth: d }, scene);
+        wallE.position.set(SX + w / 2 + 0.35, h / 2, SZ);
+        wallE.material = wallMat;
+        wallE.checkCollisions = true;
+
+        // Front wall — two side panels flanking the doorway (door width = 2.2)
+        const doorW = 2.2, doorH = 3.8;
+        const sideW = (w - doorW) / 2;
+        const wallFL = BABYLON.MeshBuilder.CreateBox("storeWallFL", { width: sideW, height: h, depth: 1.0 }, scene);
+        wallFL.position.set(SX - doorW / 2 - sideW / 2, h / 2, SZ - d / 2 - 0.35);
+        wallFL.material = wallMat;
+        wallFL.checkCollisions = true;
+
+        const wallFR = BABYLON.MeshBuilder.CreateBox("storeWallFR", { width: sideW, height: h, depth: 1.0 }, scene);
+        wallFR.position.set(SX + doorW / 2 + sideW / 2, h / 2, SZ - d / 2 - 0.35);
+        wallFR.material = wallMat;
+        wallFR.checkCollisions = true;
+
+        // Front wall above door (lintel)
+        const lintel = BABYLON.MeshBuilder.CreateBox("storeLintel", { width: doorW, height: h - doorH, depth: 1.0 }, scene);
+        lintel.position.set(SX, doorH + (h - doorH) / 2, SZ - d / 2 - 0.35);
+        lintel.material = wallMat;
+        lintel.checkCollisions = true;
 
         // Roof
-        const roof = BABYLON.MeshBuilder.CreateBox("storeRoof", { width: w + 1, height: 0.8, depth: d + 1 }, scene);
-        roof.position.set(pos.x, h + 0.4, pos.z);
+        const roof = BABYLON.MeshBuilder.CreateBox("storeRoof", { width: w + 0.6, height: 0.5, depth: d + 0.6 }, scene);
+        roof.position.set(SX, h + 0.25, SZ);
         roof.material = mat(scene, COLOURS.roof);
 
-        // Building label
+        // Interior floor
+        const floor = BABYLON.MeshBuilder.CreateGround("storeFloor", { width: w - 0.4, height: d - 0.4 }, scene);
+        floor.position.set(SX, 0.02, SZ);
+        floor.material = floorMat;
+        floor.checkCollisions = false;
+
+        // Interior ceiling
+        const ceil = BABYLON.MeshBuilder.CreateBox("storeCeil", { width: w - 0.3, height: 0.2, depth: d - 0.3 }, scene);
+        ceil.position.set(SX, h - 0.1, SZ);
+        ceil.material = ceilMat;
+
+        // ── Door (pivots from left edge, swings inward = +Z) ──────────
+        // Pivot node at the door's hinge (left edge of doorway)
+        const doorPivot = new BABYLON.TransformNode("storeDoorPivot", scene);
+        doorPivot.position.set(SX - doorW / 2, 0, SZ - d / 2);
+
+        const doorMesh = BABYLON.MeshBuilder.CreateBox("storeDoor",
+            { width: doorW, height: doorH, depth: 0.1 }, scene);
+        doorMesh.material = mat(scene, COLOURS.door);
+        // Offset so left edge aligns with pivot
+        doorMesh.position.set(doorW / 2, doorH / 2, 0);
+        doorMesh.parent = doorPivot;
+
+        // Door handle — outside face
+        const handle = BABYLON.MeshBuilder.CreateSphere("storeDoorHandle", { diameter: 0.18 }, scene);
+        handle.material = mat(scene, "#c8a000");
+        handle.position.set(doorW - 0.25, doorH / 2, 0.14);
+        handle.parent = doorPivot;
+
+        // Door handle — inside face
+        const handleInner = BABYLON.MeshBuilder.CreateSphere("storeDoorHandleInner", { diameter: 0.18 }, scene);
+        handleInner.material = mat(scene, "#c8a000");
+        handleInner.position.set(doorW - 0.25, doorH / 2, -0.14);
+        handleInner.parent = doorPivot;
+
+        // ── Store sign & hiring sign ──────────────────────────────────
         const storeLabel = BABYLON.MeshBuilder.CreatePlane("storeLabel", { width: 10, height: 2.5 }, scene);
-        storeLabel.position.set(pos.x, 4.5, pos.z - d / 2 - 0.05);
+        storeLabel.position.set(SX, 4.5, SZ - d / 2 - 0.9);
         storeLabel.material = new BABYLON.StandardMaterial("storeLabelMat", scene);
         const storeLabelTex = new BABYLON.DynamicTexture("storeLabelTex", { width: 512, height: 128 }, scene);
         storeLabelTex.drawText("STORE", null, 96, "bold 88px Arial", "#333333", "#e8d5b0", true);
@@ -590,25 +666,126 @@ const World = (() => {
         storeLabel.material.emissiveColor = new BABYLON.Color3(0.9, 0.85, 0.7);
         storeLabel.material.backFaceCulling = false;
 
-        // Sign above door
         const sign = BABYLON.MeshBuilder.CreatePlane("hiringSign", { width: 4, height: 1.2 }, scene);
-        sign.position.set(pos.x, h - 0.5, pos.z - d / 2 - 0.1);
-        sign.material = mat(scene, COLOURS.hiringSign);
-
-        // Sign text via dynamic texture
+        sign.position.set(SX, h - 0.5, SZ - d / 2 - 0.9);
         const signTex = new BABYLON.DynamicTexture("signTex", { width: 512, height: 128 }, scene);
         signTex.drawText("NOW HIRING", null, 90, "bold 72px Arial", "white", "#cc0000", true);
+        sign.material = new BABYLON.StandardMaterial("hiringSignMat", scene);
         sign.material.diffuseTexture = signTex;
         sign.material.emissiveColor = new BABYLON.Color3(1, 0.2, 0.2);
+        sign.material.backFaceCulling = false;
 
-        // Trigger zone (in front of door)
-        const trigger = BABYLON.MeshBuilder.CreateBox("storeTrigger", { width: 6, height: 3, depth: 4 }, scene);
-        trigger.position.set(pos.x, 1.5, pos.z - d / 2 - 2);
-        trigger.isVisible = false;
+        // ── Interior — store counter (front half) ─────────────────────
+        const counterMat = mat(scene, "#8B5E3C");
+        const counter = BABYLON.MeshBuilder.CreateBox("storeCounter",
+            { width: w - 6, height: 1.1, depth: 1.4 }, scene);
+        counter.position.set(SX, 0.55, SZ - d / 2 + 4.5);
+        counter.material = counterMat;
+        counter.checkCollisions = true;
+
+        // Invisible full-height blocker so the player can't step over the counter
+        const counterBlocker = BABYLON.MeshBuilder.CreateBox("storeCounterBlocker",
+            { width: w - 6, height: 2.5, depth: 1.4 }, scene);
+        counterBlocker.position.set(SX, 1.25, SZ - d / 2 + 4.5);
+        counterBlocker.isVisible = false;
+        counterBlocker.checkCollisions = true;
+
+        const counterTop = BABYLON.MeshBuilder.CreateBox("storeCounterTop",
+            { width: w - 5.8, height: 0.12, depth: 1.6 }, scene);
+        counterTop.position.set(SX, 1.12, SZ - d / 2 + 4.5);
+        counterTop.material = mat(scene, "#d4b896");
+
+        // ── Back-room divider wall with doorway ───────────────────────
+        const offDoorW = 2.0, offDoorH = 3.4;
+        const offSideW = (w - offDoorW) / 2;
+        const divZ = SZ + 0.5; // divider Z
+
+        const divL = BABYLON.MeshBuilder.CreateBox("storeDivL",
+            { width: offSideW, height: h - 0.3, depth: 1.0 }, scene);
+        divL.position.set(SX - offDoorW / 2 - offSideW / 2, (h - 0.3) / 2, divZ + 0.375);
+        divL.material = wallMat;
+        divL.checkCollisions = true;
+
+        const divR = BABYLON.MeshBuilder.CreateBox("storeDivR",
+            { width: offSideW, height: h - 0.3, depth: 1.0 }, scene);
+        divR.position.set(SX + offDoorW / 2 + offSideW / 2, (h - 0.3) / 2, divZ + 0.375);
+        divR.material = wallMat;
+        divR.checkCollisions = true;
+
+        const divLintel = BABYLON.MeshBuilder.CreateBox("storeDivLintel",
+            { width: offDoorW, height: h - offDoorH, depth: 1.0 }, scene);
+        divLintel.position.set(SX, offDoorH + (h - offDoorH) / 2, divZ + 0.375);
+        divLintel.material = wallMat;
+        divLintel.checkCollisions = true;
+
+        // ── Office furniture ──────────────────────────────────────────
+        const deskMat  = mat(scene, "#5c3d1e");
+        const chairMat = mat(scene, "#2a2a3a");
+
+        // Desk
+        const desk = BABYLON.MeshBuilder.CreateBox("storeDesk",
+            { width: 3.2, height: 0.1, depth: 1.8 }, scene);
+        desk.position.set(SX, 0.85, SZ + d / 2 - 3);
+        desk.material = deskMat;
+        desk.checkCollisions = true;
+
+        // Invisible full-height blocker so the player can't clip through the thin tabletop
+        const deskBlocker = BABYLON.MeshBuilder.CreateBox("deskBlocker",
+            { width: 3.2, height: 2.5, depth: 1.8 }, scene);
+        deskBlocker.position.set(SX, 1.25, SZ + d / 2 - 3);
+        deskBlocker.isVisible = false;
+        deskBlocker.checkCollisions = true;
+
+        // Desk legs
+        [[-1.4, -0.7], [-1.4, 0.7], [1.4, -0.7], [1.4, 0.7]].forEach(([ox, oz], i) => {
+            const leg = BABYLON.MeshBuilder.CreateBox("deskLeg" + i,
+                { width: 0.12, height: 0.85, depth: 0.12 }, scene);
+            leg.position.set(SX + ox, 0.425, SZ + d / 2 - 3 + oz);
+            leg.material = deskMat;
+        });
+
+        // Manager's chair (behind desk, facing south = -Z)
+        function buildChair(name, cx, cy, cz, facingY) {
+            const root = new BABYLON.TransformNode(name + "_root", scene);
+            root.position.set(cx, cy, cz);
+            root.rotation.y = facingY;
+
+            const seat = BABYLON.MeshBuilder.CreateBox(name + "_seat",
+                { width: 0.72, height: 0.1, depth: 0.66 }, scene);
+            seat.position.set(0, 0, 0);
+            seat.material = chairMat;
+            seat.parent = root;
+
+            const back = BABYLON.MeshBuilder.CreateBox(name + "_back",
+                { width: 0.72, height: 0.7, depth: 0.1 }, scene);
+            back.position.set(0, 0.4, -0.3);
+            back.material = chairMat;
+            back.parent = root;
+
+            [[0.28, -0.25], [0.28, 0.25], [-0.28, -0.25], [-0.28, 0.25]].forEach(([lx, lz], i) => {
+                const leg = BABYLON.MeshBuilder.CreateBox(name + "_leg" + i,
+                    { width: 0.08, height: 0.44, depth: 0.08 }, scene);
+                leg.position.set(lx, -0.27, lz);
+                leg.material = chairMat;
+                leg.parent = root;
+            });
+        }
+
+        // Manager chair: behind desk, faces south toward player
+        buildChair("mgrChair", SX, 0.88, SZ + d / 2 - 1.5, Math.PI);
+        // Player chair: in front of desk, faces north toward manager
+        buildChair("plyChair", SX, 0.88, SZ + d / 2 - 5.5, 0);
+
+        // ── Trigger zone (in front of door) ───────────────────────────
+        const trigger = BABYLON.MeshBuilder.CreateBox("storeTrigger",
+            { width: 6, height: 3, depth: 4 }, scene);
+        trigger.position.set(SX, 1.5, SZ - d / 2 - 2);
+        trigger.isVisible  = false;
         trigger.isPickable = false;
-        trigger.metadata = { type: "storeTrigger" };
+        trigger.metadata   = { type: "storeTrigger" };
 
-        return { type: "store", bld, trigger, pos };
+        return { type: "store", bld: wallN, trigger, pos, doorPivot,
+                 doorOpenRot: -Math.PI / 2 };
     }
 
     // ── Hotel ────────────────────────────────────────────────────────

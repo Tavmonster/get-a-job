@@ -151,6 +151,7 @@ const Player = (() => {
     }
 
     const TURN_SPEED = 0.04; // radians per frame
+    let _fpvMode = false;   // when true, A/D keys don't rotate (mouse does it)
 
     // ── Knockback state ───────────────────────────────────────────────
     let knockbackVelX = 0;
@@ -171,17 +172,22 @@ const Player = (() => {
     function update() {
         if (!mesh || !enabled) return;
 
-        // ── Rotation (Left / Right arrows or A / D) ──────────────────
-        if (Input.isHeld("KeyA") || Input.isHeld("ArrowLeft"))  mesh.rotation.y -= TURN_SPEED;
-        if (Input.isHeld("KeyD") || Input.isHeld("ArrowRight")) mesh.rotation.y += TURN_SPEED;
+        // ── No rotation via keys — A/D and arrows all strafe ─────────
 
         // ── Forward / backward along character's own facing direction ─
         let moveZ = 0;
         if (Input.isHeld("KeyW") || Input.isHeld("ArrowUp"))   moveZ =  1;
         if (Input.isHeld("KeyS") || Input.isHeld("ArrowDown")) moveZ = -1;
 
-        const fx = Math.sin(mesh.rotation.y) * moveZ * SPEED;
-        const fz = Math.cos(mesh.rotation.y) * moveZ * SPEED;
+        // ── Strafe left / right (all modes) ──────────────────────────
+        let moveX = 0;
+        if (Input.isHeld("KeyA") || Input.isHeld("ArrowLeft"))  moveX = -1;
+        if (Input.isHeld("KeyD") || Input.isHeld("ArrowRight")) moveX =  1;
+
+        // Forward vector
+        const fy = mesh.rotation.y;
+        const fx = Math.sin(fy) * moveZ * SPEED + Math.cos(fy) * moveX * SPEED;
+        const fz = Math.cos(fy) * moveZ * SPEED - Math.sin(fy) * moveX * SPEED;
 
         velY += GRAVITY;
         mesh.moveWithCollisions(new BABYLON.Vector3(fx + knockbackVelX, velY, fz + knockbackVelZ));
@@ -200,7 +206,7 @@ const Player = (() => {
         }
 
         // ── Walking animation ─────────────────────────────────────────
-        const isWalking = moveZ !== 0;
+        const isWalking = moveZ !== 0 || moveX !== 0;
         if (isWalking) {
             walkTime += 0.15;
             const legSwing = Math.sin(walkTime) * 0.45;
@@ -227,6 +233,8 @@ const Player = (() => {
         if (mesh) mesh.setEnabled(val);
     }
 
+    function setFPV(val) { _fpvMode = !!val; }
+
     function getMesh() { return mesh; }
 
     function getPosition() {
@@ -237,5 +245,5 @@ const Player = (() => {
         if (mesh) mesh.position.copyFrom(pos);
     }
 
-    return { init, update, setEnabled, getMesh, getPosition, teleport, applyKnockback };
+    return { init, update, setEnabled, setFPV, getMesh, getPosition, teleport, applyKnockback };
 })();

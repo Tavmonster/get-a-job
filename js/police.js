@@ -19,8 +19,8 @@
 const PoliceCar = (() => {
     const PATROL_SPEED  = 0.085;
     const CHASE_SPEED   = 0.20;
-    const TURN_SPEED    = 0.07;    // rad/frame max yaw rate
-    const REACH_DIST    = 4.5;     // waypoint snap distance
+    const TURN_SPEED    = 0.13;    // rad/frame max yaw rate
+    const REACH_DIST    = 2.0;     // waypoint snap distance (tight to prevent corner overshoot)
     const ARREST_DIST   = 6.5;     // catch / arrest distance (must be > truck half-depth 4.5)
     const CHASE_BRAKE_START = 10.0; // begin slowing at this distance in chase mode
     const LOOK_AHEAD    = 9.0;     // avoidance ray length
@@ -29,6 +29,17 @@ const PoliceCar = (() => {
     const HIT_DIST      = 2.8;     // player knockback distance
     const RAY_INTERVAL  = 4;       // avoidance ray throttle (every N frames)
     const LIGHT_PERIOD  = 8;       // frames per light half-cycle
+
+    // ── Park zone (grid cols 0-1, rows 0-1) ──────────────────────────────
+    // Park grass covers x ∈ (-105, -45), z ∈ (-105, -45).
+    // When chasing and the player OR the police car is inside this zone,
+    // the police may drive directly across grass/sidewalks instead of
+    // following road-centreline nodes.
+    const PARK_MIN_X = -105, PARK_MAX_X = -45;
+    const PARK_MIN_Z = -105, PARK_MAX_Z = -45;
+    function inParkZone(x, z) {
+        return x > PARK_MIN_X && x < PARK_MAX_X && z > PARK_MIN_Z && z < PARK_MAX_Z;
+    }
 
     // ── Patrol route ────────────────────────────────────────────────────
     // Full outer-ring patrol, clockwise, right-lane offsets.
@@ -303,6 +314,7 @@ const PoliceCar = (() => {
 
         // ── Determine steering target ─────────────────────────────────────
         let targetX, targetZ;
+        let parkChase = false;   // true when police may cut across park
 
         if (state === 'patrol') {
             const wp = PATROL_ROUTE[patrolIdx];
@@ -312,31 +324,45 @@ const PoliceCar = (() => {
             const dx = targetX - pivot_.position.x;
             const dz = targetZ - pivot_.position.z;
             if (dx * dx + dz * dz < REACH_DIST * REACH_DIST) {
+                // Snap precisely to waypoint corner before turning (prevents arc drift)
+                pivot_.position.x = targetX;
+                pivot_.position.z = targetZ;
                 patrolIdx = (patrolIdx + 1) % PATROL_ROUTE.length;
             }
         } else {
-            // Chase: navigate via road-centreline intersection nodes
-            targetX = chaseNode[0];
-            targetZ = chaseNode[1];
+            const tgt = Truck.isDrivingActive()
+                ? Truck.getMesh().position
+                : Player.getPosition();
 
-            const dx = targetX - pivot_.position.x;
-            const dz = targetZ - pivot_.position.z;
-            if (dx * dx + dz * dz < REACH_DIST * REACH_DIST) {
-                // Reached node — pick the next one closest to target
-                const tgt = Truck.isDrivingActive()
-                    ? Truck.getMesh().position
-                    : Player.getPosition();
-                chaseNode = pickNextNode(chaseNode[0], chaseNode[1], tgt.x, tgt.z);
-                targetX   = chaseNode[0];
-                targetZ   = chaseNode[1];
+            // Park-shortcut: if the target or the police is inside the park zone
+            // allow direct navigation across grass/sidewalks instead of road nodes.
+            parkChase = inParkZone(pivot_.position.x, pivot_.position.z) ||
+                        inParkZone(tgt.x, tgt.z);
+
+            if (parkChase) {
+                // Drive straight at the player/truck.
+                targetX = tgt.x;
+                targetZ = tgt.z;
+            } else {
+                // Chase: navigate via road-centreline intersection nodes
+                targetX = chaseNode[0];
+                targetZ = chaseNode[1];
+
+                const dx = targetX - pivot_.position.x;
+                const dz = targetZ - pivot_.position.z;
+                if (dx * dx + dz * dz < REACH_DIST * REACH_DIST) {
+                    // Snap to node, then pick next toward target
+                    pivot_.position.x = targetX;
+                    pivot_.position.z = targetZ;
+                    chaseNode = pickNextNode(chaseNode[0], chaseNode[1], tgt.x, tgt.z);
+                    targetX   = chaseNode[0];
+                    targetZ   = chaseNode[1];
+                }
             }
 
             // Continuous arrest check (every frame, not just at node arrival)
-            const tgt2 = Truck.isDrivingActive()
-                ? Truck.getMesh().position
-                : Player.getPosition();
-            const adx = tgt2.x - pivot_.position.x;
-            const adz = tgt2.z - pivot_.position.z;
+            const adx = tgt.x - pivot_.position.x;
+            const adz = tgt.z - pivot_.position.z;
             if (adx * adx + adz * adz < ARREST_DIST * ARREST_DIST) {
                 state = 'inactive';
                 GameState.set(GameState.STATES.JAILED);
@@ -344,8 +370,13 @@ const PoliceCar = (() => {
             }
         }
 
-        // ── Avoidance rays (patrol only, throttled) ──────────────────────
-        // During chase the police ignores other vehicles.
+        // ── Avoidance rays (throttled) ────────────────────────────────────
+        // Patrol: detect NPC cars only.
+        // Park chase: detect all solid obstacles (buildings, park equipment, NPC
+        //   cars) — but NOT roads, sidewalks, or grass (flat planes are never
+        //   hit by horizontal rays).  Side-ray distances are used to apply a
+        //   small steering bias so the car can nudge around equipment.
+        let _steerBias = 0;
         if (state === 'patrol' && (_frame % RAY_INTERVAL === 0)) {
             const sinY = Math.sin(pivot_.rotation.y);
             const cosY = Math.cos(pivot_.rotation.y);
@@ -380,7 +411,57 @@ const PoliceCar = (() => {
             _speedMult = minHit <= LOOK_AHEAD
                 ? Math.max(0, (minHit - STOP_DIST) / (LOOK_AHEAD - STOP_DIST))
                 : 1.0;
-        } else if (state === 'chase') {
+        } else if (state === 'chase' && parkChase && (_frame % RAY_INTERVAL === 0)) {
+            // Broad obstacle detection — any pickable solid mesh (buildings,
+            // park equipment, NPC cars).  Flat roads/grass/sidewalks have no
+            // vertical extent so horizontal rays will never hit them.
+            const parkObstacleFilter = m =>
+                m !== collider_ && m.isPickable !== false;
+
+            const sinY = Math.sin(pivot_.rotation.y);
+            const cosY = Math.cos(pivot_.rotation.y);
+            _fwd.set(sinY, 0, cosY);
+            _rgt.set(cosY, 0, -sinY);
+
+            _frontBase.set(
+                pivot_.position.x + _fwd.x * 2.2, 0.9,
+                pivot_.position.z + _fwd.z * 2.2
+            );
+            _orig0.copyFrom(_frontBase);                              // centre
+            _orig1.set(                                               // right
+                _frontBase.x + _rgt.x * CAR_HALF_W, _frontBase.y,
+                _frontBase.z + _rgt.z * CAR_HALF_W
+            );
+            _orig2.set(                                               // left
+                _frontBase.x - _rgt.x * CAR_HALF_W, _frontBase.y,
+                _frontBase.z - _rgt.z * CAR_HALF_W
+            );
+
+            _ray.direction.copyFrom(_fwd);
+            _ray.length = LOOK_AHEAD;
+
+            _ray.origin.copyFrom(_orig0);
+            const hC = scene_.pickWithRay(_ray, parkObstacleFilter);
+            const distC = (hC && hC.hit) ? hC.distance : LOOK_AHEAD + 1;
+
+            _ray.origin.copyFrom(_orig1);
+            const hR = scene_.pickWithRay(_ray, parkObstacleFilter);
+            const distR = (hR && hR.hit) ? hR.distance : LOOK_AHEAD + 1;
+
+            _ray.origin.copyFrom(_orig2);
+            const hL = scene_.pickWithRay(_ray, parkObstacleFilter);
+            const distL = (hL && hL.hit) ? hL.distance : LOOK_AHEAD + 1;
+
+            const minHit = Math.min(distC, distL, distR);
+            _speedMult = minHit <= LOOK_AHEAD
+                ? Math.max(0, (minHit - STOP_DIST) / (LOOK_AHEAD - STOP_DIST))
+                : 1.0;
+
+            // Steer away from whichever side has the closer obstacle.
+            if (minHit < LOOK_AHEAD) {
+                _steerBias = (distL < distR) ? TURN_SPEED * 0.6 : -TURN_SPEED * 0.6;
+            }
+        } else if (state === 'chase' && !parkChase) {
             // Brake as we close in so the car stops at the target rather than
             // driving through the truck/player mesh.
             const tgt3 = Truck.isDrivingActive()
@@ -408,9 +489,13 @@ const PoliceCar = (() => {
             let diff = desired - pivot_.rotation.y;
             while (diff >  Math.PI) diff -= 2 * Math.PI;
             while (diff < -Math.PI) diff += 2 * Math.PI;
+            // Add obstacle-avoidance steering bias when navigating the park.
+            diff += _steerBias;
             const turn = Math.max(-TURN_SPEED, Math.min(TURN_SPEED, diff));
             pivot_.rotation.y += turn;
-            alignMult = Math.max(0, Math.cos(diff));
+            // Squared cosine: drops to near-zero much faster for large angles,
+            // so the car is nearly stopped before it has finished turning the corner.
+            alignMult = Math.pow(Math.max(0, Math.cos(diff)), 2);
         }
 
         // ── Move ─────────────────────────────────────────────────────────

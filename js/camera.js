@@ -58,6 +58,10 @@ const GameCamera = (() => {
         camera.fov   = 1.1;   // ~63° — slightly wide
 
         target = targetMesh;
+
+        // Remove ALL built-in FreeCamera key/mouse bindings — we drive it manually.
+        camera.inputs.clear();
+
         return camera;
     }
 

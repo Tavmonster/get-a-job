@@ -174,5 +174,14 @@ const Truck = (() => {
 
     function isDrivingActive() { return driving; }
 
-    return { init, update, setDriving, setVisible, getMesh, isDrivingActive };
+    function resetToSpawn() {
+        if (!mesh) return;
+        const spawnPos = World.getTruckSpawnPos();
+        mesh.position.copyFrom(spawnPos);
+        mesh.position.y = 0;
+        mesh.rotation.y = Math.PI;
+        speed = 0;
+    }
+
+    return { init, update, setDriving, setVisible, getMesh, isDrivingActive, resetToSpawn };
 })();

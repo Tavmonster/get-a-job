@@ -47,7 +47,51 @@
         // ── UI ──────────────────────────────────────────────────────
         UI.init(scene);
 
-        // ── Minimap ─────────────────────────────────────────────────
+        // ── Door animation state ───────────────────────────────────
+        const _DOOR_SPEED = 0.08;  // radians per frame
+
+        // ── Pointer lock helpers ───────────────────────────────────
+        // Flag set when WE release the lock (DOM overlays), so pointerlockchange
+        // doesn't immediately re-acquire it.
+        let _lockReleasedByOverlay = false;
+
+        function lockPointer() {
+            if (document.pointerLockElement !== canvas) canvas.requestPointerLock();
+        }
+        function releasePointerLock() {
+            _lockReleasedByOverlay = true;
+            document.exitPointerLock();
+        }
+
+        // When lock is lost (Esc or exitPointerLock), only auto-relock if WE
+        // didn't release it (i.e. user pressed Esc manually, don't override that).
+        document.addEventListener('pointerlockchange', () => {
+            if (document.pointerLockElement === canvas) {
+                _lockReleasedByOverlay = false; // acquired
+                return;
+            }
+            if (_lockReleasedByOverlay) return; // our own release, don't relock
+            // User pressed Esc — don't immediately re-lock; let them click to restore.
+        });
+
+        // Canvas click always locks
+        canvas.addEventListener('click', lockPointer);
+
+        // ── First-person mouse-look state ───────────────────────────
+        let _fpvPitch = 0;   // radians — vertical look offset, clamped ±70°
+        const _FPV_SENS   = 0.0018;
+        const _FPV_PITCH_MAX = Math.PI * 0.38;   // ~68°
+
+        canvas.addEventListener("mousemove", (e) => {
+            if (document.pointerLockElement !== canvas) return;
+            if (Cutscene.isActive()) return; // don't accumulate during cutscenes
+            // Horizontal: rotate the player mesh so movement stays aligned
+            playerMesh.rotation.y += e.movementX * _FPV_SENS;
+            // Vertical: offset the camera pitch only (don't tilt the body)
+            _fpvPitch = Math.max(-_FPV_PITCH_MAX,
+                         Math.min( _FPV_PITCH_MAX, _fpvPitch + e.movementY * _FPV_SENS));
+        });
+
         Minimap.init(scene, mainCamera);        const playerDot = Minimap.createDot(scene, "#4488ff", 9);
         const truckDot  = Minimap.createDot(scene, "#ffaa00", 9);
         const policeDot = Minimap.createDot(scene, "#ff2222", 11);
@@ -373,8 +417,48 @@
             // playIntroCutscene drives the camera via its own observer.
             if (Cutscene.isActive()) return;
 
+            // ── Store door animation ──────────────────────────────────────────────
+            // Only runs during free play; the cutscene handles the door in its own phases.
+            if (storeData && storeData.doorPivot) {
+                const _ddx = playerPos.x - storeData.pos.x;
+                const _ddz = playerPos.z - (storeData.pos.z - 7);
+                const _nearDoor = Math.abs(_ddx) < 4 && _ddz > -3 && _ddz < 3;
+                const _targetRot = _nearDoor ? storeData.doorOpenRot : 0;
+                const _curRot = storeData.doorPivot.rotation.y;
+                if (Math.abs(_curRot - _targetRot) > 0.001) {
+                    storeData.doorPivot.rotation.y += Math.sign(_targetRot - _curRot) *
+                        Math.min(Math.abs(_targetRot - _curRot), _DOOR_SPEED);
+                }
+            }
+
             // ── Camera ─────────────────────────────────────────
-            GameCamera.update();
+            // First-person whenever the player is inside the store building.
+            const _insideStore = storeData &&
+                Math.abs(playerPos.x - storeData.pos.x) < 7 &&
+                playerPos.z > storeData.pos.z - 7 &&
+                playerPos.z < storeData.pos.z + 7;
+            if (_insideStore) {
+                Player.setFPV(true);
+                // Hide player body so it doesn't clip into view
+                playerMesh.getChildMeshes().forEach(m => { m.isVisible = false; });
+                const _cam  = GameCamera.getCamera();
+                const _eyeY = playerMesh.position.y + 0.64;
+                const _yaw  = playerMesh.rotation.y;
+                // Build a look-at combining yaw (from mesh) + pitch (from mouse)
+                const _lookDist = 8;
+                const _lx = playerMesh.position.x + Math.sin(_yaw) * _lookDist * Math.cos(_fpvPitch);
+                const _lz = playerMesh.position.z + Math.cos(_yaw) * _lookDist * Math.cos(_fpvPitch);
+                const _ly = _eyeY - Math.sin(_fpvPitch) * _lookDist;
+                _cam.position.set(playerMesh.position.x, _eyeY, playerMesh.position.z);
+                _cam.setTarget(new BABYLON.Vector3(_lx, _ly, _lz));
+            } else {
+                Player.setFPV(false);
+                // Restore player body visibility when outside store
+                playerMesh.getChildMeshes().forEach(m => { m.isVisible = true; });
+                // Don't force-release pointer lock outside store — keep it locked globally
+                _fpvPitch = 0;
+                GameCamera.update();
+            }
 
             // ── Walking states ──────────────────────────────────────
             if (gs === S.WALK_TO_STORE || gs === S.PAYDAY || gs === S.FAST_FOOD || gs === S.HOTEL) {
