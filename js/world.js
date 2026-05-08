@@ -336,6 +336,7 @@ const World = (() => {
         const back = BABYLON.MeshBuilder.CreateBox("benchBack_" + id, { width: 3.5, height: 0.8, depth: 0.15 }, scene);
         back.position.set(pos.x, 1.1, pos.z + 0.45 * dz);
         back.material = mat(scene, COLOURS.bench);
+        back.metadata = { isParkObstacle: true };
     }
 
     // ── Slide ─────────────────────────────────────────────────────────
@@ -348,6 +349,7 @@ const World = (() => {
             const pole = BABYLON.MeshBuilder.CreateCylinder("slidePole_" + ox, { height: poleH, diameter: 0.22 }, scene);
             pole.position.set(pos.x + ox, poleH / 2, pos.z);
             pole.material = mat(scene, metal);
+            pole.metadata = { isParkObstacle: true };
         });
 
         // Crossbar connecting poles at top
@@ -418,6 +420,7 @@ const World = (() => {
             );
             post.position.set(pos.x + ox, frameH / 2, pos.z);
             post.material = mat(scene, metal);
+            post.metadata = { isParkObstacle: true };
 
             // // Short diagonal brace from the base outward for stability look
             // const braceLen = 2.2;
@@ -536,6 +539,7 @@ const World = (() => {
         }, scene);
         column.position.set(pos.x, 1.15, pos.z);
         column.material = mat(scene, stone);
+        column.metadata = { isParkObstacle: true };
 
         // Spout cap
         const cap = BABYLON.MeshBuilder.CreateCylinder("fountainCap", {

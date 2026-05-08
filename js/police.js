@@ -38,7 +38,7 @@ const PoliceCar = (() => {
     const PARK_MIN_X = -105, PARK_MAX_X = -45;
     const PARK_MIN_Z = -105, PARK_MAX_Z = -45;
     function inParkZone(x, z) {
-        return x > PARK_MIN_X && x < PARK_MAX_X && z > PARK_MIN_Z && z < PARK_MAX_Z;
+        return x >= PARK_MIN_X && x <= PARK_MAX_X && z >= PARK_MIN_Z && z <= PARK_MAX_Z;
     }
 
     // ── Patrol route ────────────────────────────────────────────────────
@@ -334,9 +334,9 @@ const PoliceCar = (() => {
                 ? Truck.getMesh().position
                 : Player.getPosition();
 
-            // Park-shortcut: if the target or the police is inside the park zone
-            // allow direct navigation across grass/sidewalks instead of road nodes.
-            parkChase = inParkZone(pivot_.position.x, pivot_.position.z) ||
+            // Park-direct: both police AND player inside park zone.
+            // Prevents going off-road through adjacent buildings when player is outside.
+            parkChase = inParkZone(pivot_.position.x, pivot_.position.z) &&
                         inParkZone(tgt.x, tgt.z);
 
             if (parkChase) {
@@ -370,13 +370,13 @@ const PoliceCar = (() => {
             }
         }
 
-        // ── Avoidance rays (throttled) ────────────────────────────────────
-        // Patrol: detect NPC cars only.
-        // Park chase: detect all solid obstacles (buildings, park equipment, NPC
-        //   cars) — but NOT roads, sidewalks, or grass (flat planes are never
-        //   hit by horizontal rays).  Side-ray distances are used to apply a
-        //   small steering bias so the car can nudge around equipment.
-        let _steerBias = 0;
+        // ── Avoidance / speed adjustment ───────────────────────────────────
+        // Patrol: NPC-car avoidance rays only (throttled).
+        // Park chase: 5-direction fan of rays toward target — picks the clearest
+        //   path that still makes progress. Filter: buildings (checkCollisions),
+        //   NPC cars (isNPCCar metadata), park equipment (isParkObstacle metadata).
+        //   Player/truck are intentionally excluded so they don't cause braking.
+        // Road chase: simple brake-on-approach.
         if (state === 'patrol' && (_frame % RAY_INTERVAL === 0)) {
             const sinY = Math.sin(pivot_.rotation.y);
             const cosY = Math.cos(pivot_.rotation.y);
@@ -411,55 +411,62 @@ const PoliceCar = (() => {
             _speedMult = minHit <= LOOK_AHEAD
                 ? Math.max(0, (minHit - STOP_DIST) / (LOOK_AHEAD - STOP_DIST))
                 : 1.0;
-        } else if (state === 'chase' && parkChase && (_frame % RAY_INTERVAL === 0)) {
-            // Broad obstacle detection — any pickable solid mesh (buildings,
-            // park equipment, NPC cars).  Flat roads/grass/sidewalks have no
-            // vertical extent so horizontal rays will never hit them.
-            const parkObstacleFilter = m =>
-                m !== collider_ && m.isPickable !== false;
+        } else if (state === 'chase' && parkChase) {
+            // 5-direction fan of rays every frame for responsive steering.
+            const pt = Truck.isDrivingActive()
+                ? Truck.getMesh().position
+                : Player.getPosition();
 
-            const sinY = Math.sin(pivot_.rotation.y);
-            const cosY = Math.cos(pivot_.rotation.y);
-            _fwd.set(sinY, 0, cosY);
-            _rgt.set(cosY, 0, -sinY);
+            // Only detect solid obstacles — not the player/truck target.
+            // checkCollisions catches buildings + tree trunks + sandbox walls.
+            // isNPCCar catches NPC car colliders (isPickable=true, checkCollisions=false).
+            // isParkObstacle catches bench backrests, slide poles, swing posts, fountain.
+            const parkFilter = m =>
+                m !== collider_ &&
+                m.isPickable !== false &&
+                (m.checkCollisions === true ||
+                 m.metadata?.isNPCCar === true ||
+                 m.metadata?.isParkObstacle === true);
 
-            _frontBase.set(
-                pivot_.position.x + _fwd.x * 2.2, 0.9,
-                pivot_.position.z + _fwd.z * 2.2
+            const idealAngle = Math.atan2(
+                pt.x - pivot_.position.x,
+                pt.z - pivot_.position.z
             );
-            _orig0.copyFrom(_frontBase);                              // centre
-            _orig1.set(                                               // right
-                _frontBase.x + _rgt.x * CAR_HALF_W, _frontBase.y,
-                _frontBase.z + _rgt.z * CAR_HALF_W
-            );
-            _orig2.set(                                               // left
-                _frontBase.x - _rgt.x * CAR_HALF_W, _frontBase.y,
-                _frontBase.z - _rgt.z * CAR_HALF_W
-            );
+            let bestAngle = idealAngle;
+            let bestClear = -1;
+            let bestDeg   = Infinity;
 
-            _ray.direction.copyFrom(_fwd);
-            _ray.length = LOOK_AHEAD;
+            for (const deg of [-60, -30, 0, 30, 60]) {
+                const angle = idealAngle + deg * Math.PI / 180;
+                const sinA  = Math.sin(angle);
+                const cosA  = Math.cos(angle);
+                _ray.origin.set(
+                    pivot_.position.x + sinA * 2.2, 0.9,
+                    pivot_.position.z + cosA * 2.2
+                );
+                _ray.direction.set(sinA, 0, cosA);
+                _ray.length = LOOK_AHEAD;
+                const hit = scene_.pickWithRay(_ray, parkFilter);
+                const clearDist = (hit && hit.hit) ? hit.distance : LOOK_AHEAD + 1;
+                // Prefer the smallest angular deviation from ideal that is clear
+                if (clearDist > STOP_DIST && Math.abs(deg) < Math.abs(bestDeg)) {
+                    bestDeg   = deg;
+                    bestAngle = angle;
+                    bestClear = clearDist;
+                }
+            }
 
-            _ray.origin.copyFrom(_orig0);
-            const hC = scene_.pickWithRay(_ray, parkObstacleFilter);
-            const distC = (hC && hC.hit) ? hC.distance : LOOK_AHEAD + 1;
-
-            _ray.origin.copyFrom(_orig1);
-            const hR = scene_.pickWithRay(_ray, parkObstacleFilter);
-            const distR = (hR && hR.hit) ? hR.distance : LOOK_AHEAD + 1;
-
-            _ray.origin.copyFrom(_orig2);
-            const hL = scene_.pickWithRay(_ray, parkObstacleFilter);
-            const distL = (hL && hL.hit) ? hL.distance : LOOK_AHEAD + 1;
-
-            const minHit = Math.min(distC, distL, distR);
-            _speedMult = minHit <= LOOK_AHEAD
-                ? Math.max(0, (minHit - STOP_DIST) / (LOOK_AHEAD - STOP_DIST))
-                : 1.0;
-
-            // Steer away from whichever side has the closer obstacle.
-            if (minHit < LOOK_AHEAD) {
-                _steerBias = (distL < distR) ? TURN_SPEED * 0.6 : -TURN_SPEED * 0.6;
+            if (bestClear < 0) {
+                _speedMult = 0; // completely blocked — stop and spin
+            } else {
+                _speedMult = bestClear > LOOK_AHEAD
+                    ? 1.0
+                    : Math.max(0.15, (bestClear - STOP_DIST) / (LOOK_AHEAD - STOP_DIST));
+                if (bestDeg !== 0 && bestDeg !== Infinity) {
+                    // Deviate toward clearest direction — use intermediate point
+                    targetX = pivot_.position.x + Math.sin(bestAngle) * 15;
+                    targetZ = pivot_.position.z + Math.cos(bestAngle) * 15;
+                }
             }
         } else if (state === 'chase' && !parkChase) {
             // Brake as we close in so the car stops at the target rather than
@@ -489,8 +496,6 @@ const PoliceCar = (() => {
             let diff = desired - pivot_.rotation.y;
             while (diff >  Math.PI) diff -= 2 * Math.PI;
             while (diff < -Math.PI) diff += 2 * Math.PI;
-            // Add obstacle-avoidance steering bias when navigating the park.
-            diff += _steerBias;
             const turn = Math.max(-TURN_SPEED, Math.min(TURN_SPEED, diff));
             pivot_.rotation.y += turn;
             // Squared cosine: drops to near-zero much faster for large angles,
@@ -504,6 +509,13 @@ const PoliceCar = (() => {
         pivot_.position.x += sinY * speed * _speedMult * alignMult;
         pivot_.position.z += cosY * speed * _speedMult * alignMult;
         pivot_.position.y  = 0;
+
+        // Clamp to park zone during park-direct chase to prevent crossing into
+        // adjacent building cells (3-unit buffer = just over one car half-width).
+        if (parkChase) {
+            pivot_.position.x = Math.max(PARK_MIN_X + 3, Math.min(PARK_MAX_X - 3, pivot_.position.x));
+            pivot_.position.z = Math.max(PARK_MIN_Z + 3, Math.min(PARK_MAX_Z - 3, pivot_.position.z));
+        }
 
         // ── Player knockback when police car is nearby ───────────────────
         const playerPos = Player.getPosition();

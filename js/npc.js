@@ -60,15 +60,6 @@ const NPCSystem = (() => {
         [ [ 15 - SW, -60], [ 15 - SW,  60] ],  // road X=+15, west kerb
         [ [ 45 + SW, -60], [ 45 + SW,  60] ],  // road X=+45, east kerb
 
-        // ── Cross-road routes (4 NPCs) ─────────────────────────────────────
-        // Walks along north kerb of Z=-15, crosses south to Z=-10 kerb, walks back
-        [ [-45, -15 - SW], [ 45, -15 - SW], [ 45, -15 + SW], [-45, -15 + SW] ],
-        // Walks along east kerb of X=-15, crosses west to X=-20 kerb, walks back
-        [ [-15 + SW, -45], [-15 + SW,  45], [-15 - SW,  45], [-15 - SW, -45] ],
-        // Walks along south kerb of Z=+15, crosses north, walks back
-        [ [-45,  15 + SW], [ 45,  15 + SW], [ 45,  15 - SW], [-45,  15 - SW] ],
-        // Walks along west kerb of X=+15, crosses east, walks back
-        [ [ 15 - SW, -45], [ 15 - SW,  45], [ 15 + SW,  45], [ 15 + SW, -45] ],
     ];
 
     const npcs = [];

@@ -1,5 +1,5 @@
 /**
- * npc_cars.js — 4 AI-driven NPC cars that patrol the road network
+ * npc_cars.js — 3 AI-driven NPC cars that patrol the road network
  *
  * Each car follows a closed rectangular clockwise loop using road centrelines.
  * Lanes are offset 2 units to the right of each road centre so cars stay in
@@ -53,7 +53,6 @@ const NPCCars = (() => {
     //  Car 0 — east+south ring (Z=-75 E, X=75 S, Z=75 W, X=-45 N)
     //  Car 1 — NE inner        (Z=-45 E, X=45 S, Z=-15 W, X=15 N)
     //  Car 2 — SW inner        (Z=15 E, X=-15 S, Z=45 W, X=-75[south] N)
-    //  Car 3 — centre ring     (Z=-15 E, X=15 S, Z=15 W, X=-15 N)
     const ROUTES = [
         // Car 0 — east+south ring  (north leg uses X=-45, east of the park)
         [[ 73, -73], [ 73,  73], [-43,  73], [-43, -73]],
@@ -64,8 +63,6 @@ const NPCCars = (() => {
         // Car 2 — SW inner ring    (north leg uses X=-75 south section only)
         [[-17,  17], [-17,  43], [-73,  43], [-73,  17]],
 
-        // Car 3 — centre ring      (roads X=±15, Z=±15) — unchanged
-        [[ 13, -13], [ 13,  13], [-13,  13], [-13, -13]],
     ];
 
     // Distinct body colours per car
@@ -73,7 +70,6 @@ const NPCCars = (() => {
         new BABYLON.Color3(0.15, 0.35, 0.80),   // steel blue
         new BABYLON.Color3(0.80, 0.15, 0.15),   // red
         new BABYLON.Color3(0.10, 0.55, 0.20),   // green
-        new BABYLON.Color3(0.90, 0.72, 0.08),   // yellow
     ];
 
     const cars  = [];
