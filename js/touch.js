@@ -5,8 +5,9 @@
  * the Input module so all game logic works without modification.
  *
  * Layout:
- *   • Bottom-left  — virtual joystick  (WASD / truck steering)
- *   • Bottom-right — action button "E" (interact / enter–exit truck)
+ *   • Bottom-left        — virtual joystick  (WASD / truck steering)
+ *   • Bottom-right       — action button "E" (interact / enter–exit truck)
+ *   • Right-side swipe   — horizontal drag rotates the player / camera
  *
  * z-index 100 keeps controls below cutscene overlays (z-index 200–300)
  * so cutscene Next/Skip buttons remain fully interactive.
@@ -18,11 +19,16 @@
     const STICK_RADIUS  = 55;   // outer ring radius in px
     const HANDLE_RADIUS = 22;   // inner dot radius in px
     const DEAD_ZONE     = 12;   // pixels before any key registers
+    const LOOK_SENS     = 0.006; // radians per pixel for camera/player yaw
 
     let baseEl, handleEl, actionBtn;
 
     let stickTouchId = null;
     let baseCX = 0, baseCY = 0;
+
+    // Look (right-side swipe) tracking
+    let lookTouchId  = null;
+    let lookLastX    = 0;
 
     // Keys currently held via the joystick (so we can release cleanly).
     const activeKeys = new Set();
@@ -119,28 +125,56 @@
     }, { passive: false });
 
     window.addEventListener('touchmove', (e) => {
-        if (stickTouchId === null) return;
         for (let i = 0; i < e.changedTouches.length; i++) {
-            if (e.changedTouches[i].identifier === stickTouchId) {
+            const t = e.changedTouches[i];
+            if (t.identifier === stickTouchId) {
                 e.preventDefault();
-                _updateStick(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
-                return;
+                _updateStick(t.clientX, t.clientY);
+            } else if (t.identifier === lookTouchId) {
+                e.preventDefault();
+                const dx = t.clientX - lookLastX;
+                lookLastX = t.clientX;
+                // Skip rotation during cutscenes
+                if (typeof Cutscene !== 'undefined' && Cutscene.isActive()) return;
+                // Rotate whichever mesh the camera is currently following
+                const pm = (typeof Truck !== 'undefined' && Truck.isDrivingActive())
+                    ? Truck.getMesh()
+                    : Player.getMesh();
+                if (pm) pm.rotation.y += dx * LOOK_SENS;
             }
         }
     }, { passive: false });
 
     function _endStick(e) {
         for (let i = 0; i < e.changedTouches.length; i++) {
-            if (e.changedTouches[i].identifier === stickTouchId) {
+            const t = e.changedTouches[i];
+            if (t.identifier === stickTouchId) {
                 stickTouchId = null;
                 handleEl.style.transform = 'translate(0,0)';
                 _releaseAllMovement();
-                return;
+            } else if (t.identifier === lookTouchId) {
+                lookTouchId = null;
             }
         }
     }
     window.addEventListener('touchend',    _endStick);
     window.addEventListener('touchcancel', _endStick);
+
+    // ── Look zone: any touchstart on the right half (not on joystick/E btn) ──
+
+    window.addEventListener('touchstart', (e) => {
+        if (lookTouchId !== null) return;   // already tracking a look finger
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const t = e.changedTouches[i];
+            // Must be on the right half of the screen
+            if (t.clientX < window.innerWidth * 0.45) continue;
+            // Must not already be the stick touch
+            if (t.identifier === stickTouchId) continue;
+            lookTouchId = t.identifier;
+            lookLastX   = t.clientX;
+            break;
+        }
+    }, { passive: true });
 
     // ── Action button events ──────────────────────────────────────────
 
