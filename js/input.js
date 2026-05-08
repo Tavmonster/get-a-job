@@ -36,5 +36,17 @@ const Input = (() => {
          * presses from auto-triggering the action.
          */
         flushPress: (code) => { consumed[code] = 0; },
+        /**
+         * Programmatically press a key (used by touch controls).
+         * Only fires once per press — safe to call from touchstart.
+         */
+        pressKey: (code) => {
+            if (!held[code]) {
+                held[code] = true;
+                consumed[code] = (consumed[code] || 0) + 1;
+            }
+        },
+        /** Programmatically release a key (used by touch controls). */
+        releaseKey: (code) => { held[code] = false; },
     };
 })();
