@@ -494,21 +494,22 @@ const Cutscene = (() => {
         // ── Math helpers ──────────────────────────────────────────────
         function eio(t)  { return t < 0.5 ? 2*t*t : -1 + (4 - 2*t) * t; }
         function clamp01(t) { return Math.max(0, Math.min(1, t)); }
-        function moveToward(mesh, tx, tz, speed) {
+        function moveToward(mesh, tx, tz, speed, dt) {
             const dx = tx - mesh.position.x;
             const dz = tz - mesh.position.z;
             const dist = Math.sqrt(dx * dx + dz * dz);
-            if (dist < speed) { mesh.position.x = tx; mesh.position.z = tz; return true; }
-            mesh.position.x += (dx / dist) * speed;
-            mesh.position.z += (dz / dist) * speed;
+            const step = speed * dt;
+            if (dist <= step) { mesh.position.x = tx; mesh.position.z = tz; return true; }
+            mesh.position.x += (dx / dist) * step;
+            mesh.position.z += (dz / dist) * step;
             mesh.rotation.y  = Math.atan2(dx, dz);
             return false;
         }
         function makeWalker(mesh, pts, speed) {
             let i = 0;
-            return function() {
+            return function(dt) {
                 if (i >= pts.length) return true;
-                if (moveToward(mesh, pts[i].x, pts[i].z, speed)) i++;
+                if (moveToward(mesh, pts[i].x, pts[i].z, speed, dt)) i++;
                 return i >= pts.length;
             };
         }
@@ -541,13 +542,14 @@ const Cutscene = (() => {
         const phases = [];
         const timers = [];
         function sub(text, dur, delay) { timers.push(setTimeout(() => UI.showText(text, dur), delay)); }
-        const WALK_SPEED = 0.06;
+        // Speed in units per millisecond (3.6 units/sec — same as 0.06/frame at 60 fps)
+        const WALK_SPEED = 0.0036;
 
         // Phase 0 — player pauses, camera settles looking at door ─────
         let p0elapsed = 0;
         phases.push((dt) => {
             p0elapsed += dt;
-            moveToward(playerMesh, SX, FRONT_Z - 2.5, WALK_SPEED);
+            moveToward(playerMesh, SX, FRONT_Z - 2.5, WALK_SPEED, dt);
             fpvLookAt(SX, 1.5, FRONT_Z);
             return p0elapsed > 1500;
         });
@@ -565,8 +567,8 @@ const Cutscene = (() => {
         });
 
         // Phase 2 — player walks through door ──────────────────────────
-        phases.push(() => {
-            const arrived = moveToward(playerMesh, SX, FRONT_Z + 2.0, WALK_SPEED);
+        phases.push((dt) => {
+            const arrived = moveToward(playerMesh, SX, FRONT_Z + 2.0, WALK_SPEED, dt);
             fpvForward();
             return arrived;
         });
@@ -590,15 +592,15 @@ const Cutscene = (() => {
         let p3elapsed = 0;
         phases.push((dt) => {
             p3elapsed += dt;
-            const done = mgrWalk3();
+            const done = mgrWalk3(dt);
             // Look at the manager as they approach
             fpvLookAt(mgrMesh.position.x, mgrMesh.position.y + 1.5, mgrMesh.position.z);
             return done && p3elapsed > 600;
         });
 
         // Phase 4 — player walks to join manager at west aisle ────────
-        phases.push(() => {
-            const arrived = moveToward(playerMesh, AISLE_X, GAP_S, WALK_SPEED);
+        phases.push((dt) => {
+            const arrived = moveToward(playerMesh, AISLE_X, GAP_S, WALK_SPEED, dt);
             fpvForward();
             return arrived;
         });
@@ -621,8 +623,8 @@ const Cutscene = (() => {
         let p5elapsed = 0;
         phases.push((dt) => {
             p5elapsed += dt;
-            const mDone = mgrWalk5();
-            const pDone = plyWalk5();
+            const mDone = mgrWalk5(dt);
+            const pDone = plyWalk5(dt);
             fpvForward();
             return mDone && pDone;
         });
@@ -671,7 +673,6 @@ const Cutscene = (() => {
             _done = true;
             timers.forEach(id => clearTimeout(id));
             document.removeEventListener('keydown', onSkipKey, true);
-            document.removeEventListener('touchend', onTapSkip, true);
             scene.onBeforeRenderObservable.remove(observer);
             // Reset player transforms
             playerMesh.position.y = 1;
@@ -695,20 +696,8 @@ const Cutscene = (() => {
         }
         document.addEventListener('keydown', onSkipKey, true);
 
-        // Mobile: tap anywhere on the canvas to skip (after 3 s so it's not accidental)
-        let _tapSkipEnabled = false;
-        const _tapEnableTimer = setTimeout(() => { _tapSkipEnabled = true; }, 3000);
-        timers.push(_tapEnableTimer);
-        function onTapSkip(e) {
-            if (!_tapSkipEnabled) return;
-            // Only trigger on the canvas, not on any overlay UI
-            const hit = document.elementFromPoint(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
-            if (hit && hit.id === 'renderCanvas') finish();
-        }
-        document.addEventListener('touchend', onTapSkip, { capture: true, passive: true });
-
-        // Safety: force-finish after 30 s so a stuck cutscene can't trap the player
-        const _safetyTimer = setTimeout(finish, 30000);
+        // Safety: auto-finish after 35 s in case of unexpected stall
+        const _safetyTimer = setTimeout(finish, 35000);
         timers.push(_safetyTimer);
 
         // ── Per-frame observer ─────────────────────────────────────────
