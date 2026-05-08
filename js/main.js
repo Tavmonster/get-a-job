@@ -129,8 +129,7 @@
         let interactHintActive = "";
         let paydayReady = false;
         let policeAlerted = false;
-        let interviewScore = 0;
-        // ── Game state machine ───────────────────────────────────────
+        let interviewScore = 0;        let hunger = 100;        // ── Game state machine ───────────────────────────────────────
         GameState.on((newState, prev) => {
             switch (newState) {
 
@@ -164,6 +163,7 @@
                     if (depotData) Minimap.setObjective(depotData.trigger.position);
                     // Unlock truck
                     Truck.setVisible(true);
+                    UI.setHunger(hunger);
                     setTimeout(() => {
                         GameState.set(GameState.STATES.DELIVERING);
                     }, 1500);
@@ -469,7 +469,13 @@
             if (gs === S.DELIVERING || gs === S.RETURN_DEPOT) {
                 if (Truck.isDrivingActive()) {
                     Truck.update();
-                    Packages.checkDeliveries(truckPos);
+                    if (Packages.checkDeliveries(truckPos)) {
+                        hunger = Math.max(0, hunger - 20);
+                        UI.setHunger(hunger);
+                        if (hunger === 20) {
+                            UI.showText("You're getting hungry! Visit Burger Barn after payday.", 4000);
+                        }
+                    }
                 } else {
                     Player.update();
                 }
@@ -559,6 +565,8 @@
                     }
                     UI.hideInteractHint();
                     interactHintActive = "";
+                    hunger = 0;
+                    UI.setHunger(hunger);
                     GameState.set(S.PAYDAY);
                 }
             }
@@ -598,6 +606,8 @@
                         UI.hideInteractHint();
                         interactHintActive = "";
                         Cutscene.play('fastfood', () => {
+                            hunger = 100;
+                            UI.setHunger(hunger);
                             UI.setMoney(90);
                             GameState.set(S.HOTEL);
                         });

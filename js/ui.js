@@ -10,6 +10,8 @@ const UI = (() => {
     let missionText = null;
     let moneyText = null;
     let fadeTimeout = null;
+    let hungerRow = null;
+    let hungerFill = null;
 
     function init(scene) {
         advTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI", true, scene);
@@ -79,6 +81,43 @@ const UI = (() => {
         hudText.alpha = 0;
         advTexture.addControl(hudText);
 
+        // ── Hunger bar (top-left, row 3) ────────────────────────────────
+        hungerRow = new BABYLON.GUI.StackPanel("hungerRow");
+        hungerRow.isVertical = false;
+        hungerRow.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
+        hungerRow.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+        hungerRow.height = "30px";
+        hungerRow.left = "16px";
+        hungerRow.top = "82px";
+        hungerRow.alpha = 1;
+        advTexture.addControl(hungerRow);
+
+        const hungerLbl = new BABYLON.GUI.TextBlock("hungerLbl");
+        hungerLbl.text = "HUNGER ";
+        hungerLbl.color = "#FFD700";
+        hungerLbl.fontSize = 15;
+        hungerLbl.fontFamily = "Arial";
+        hungerLbl.outlineWidth = 2;
+        hungerLbl.outlineColor = "black";
+        hungerLbl.width = "68px";
+        hungerRow.addControl(hungerLbl);
+
+        const hungerBarBg = new BABYLON.GUI.Rectangle("hungerBarBg");
+        hungerBarBg.width = "180px";
+        hungerBarBg.height = "18px";
+        hungerBarBg.background = "#888";
+        hungerBarBg.thickness = 1;
+        hungerBarBg.color = "#555";
+        hungerRow.addControl(hungerBarBg);
+
+        hungerFill = new BABYLON.GUI.Rectangle("hungerFill");
+        hungerFill.width = "180px";
+        hungerFill.height = "18px";
+        hungerFill.background = "#44cc44";
+        hungerFill.thickness = 0;
+        hungerFill.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+        hungerBarBg.addControl(hungerFill);
+
         // ── Money (top-right) ─────────────────────────────────────────
         moneyText = new BABYLON.GUI.TextBlock("moneyText");
         moneyText.text = "$0";
@@ -102,6 +141,28 @@ const UI = (() => {
     function setMoney(amount) {
         if (!moneyText) return;
         moneyText.text = `$${amount}`;
+    }
+
+    // ── Hunger bar ────────────────────────────────────────────────────
+    function setHunger(value) {
+        if (!hungerFill) return;
+        const pct = Math.max(0, Math.min(100, value)) / 100;
+        hungerFill.width = `${Math.round(pct * 180)}px`;
+        if (pct > 0.6) {
+            hungerFill.background = "#44cc44";
+        } else if (pct > 0.3) {
+            hungerFill.background = "#ff9900";
+        } else {
+            hungerFill.background = "#cc2222";
+        }
+    }
+
+    function showHungerBar() {
+        if (hungerRow) hungerRow.alpha = 1;
+    }
+
+    function hideHungerBar() {
+        if (hungerRow) hungerRow.alpha = 0;
     }
 
     // ── Show fading narrative text ────────────────────────────────────
@@ -315,5 +376,8 @@ const UI = (() => {
         showEndScreen,
         showInterviewPanel,
         setMoney,
+        setHunger,
+        showHungerBar,
+        hideHungerBar,
     };
 })();
