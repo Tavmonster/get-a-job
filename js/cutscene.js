@@ -671,6 +671,7 @@ const Cutscene = (() => {
             _done = true;
             timers.forEach(id => clearTimeout(id));
             document.removeEventListener('keydown', onSkipKey, true);
+            document.removeEventListener('touchend', onTapSkip, true);
             scene.onBeforeRenderObservable.remove(observer);
             // Reset player transforms
             playerMesh.position.y = 1;
@@ -693,6 +694,22 @@ const Cutscene = (() => {
             }
         }
         document.addEventListener('keydown', onSkipKey, true);
+
+        // Mobile: tap anywhere on the canvas to skip (after 3 s so it's not accidental)
+        let _tapSkipEnabled = false;
+        const _tapEnableTimer = setTimeout(() => { _tapSkipEnabled = true; }, 3000);
+        timers.push(_tapEnableTimer);
+        function onTapSkip(e) {
+            if (!_tapSkipEnabled) return;
+            // Only trigger on the canvas, not on any overlay UI
+            const hit = document.elementFromPoint(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+            if (hit && hit.id === 'renderCanvas') finish();
+        }
+        document.addEventListener('touchend', onTapSkip, { capture: true, passive: true });
+
+        // Safety: force-finish after 30 s so a stuck cutscene can't trap the player
+        const _safetyTimer = setTimeout(finish, 30000);
+        timers.push(_safetyTimer);
 
         // ── Per-frame observer ─────────────────────────────────────────
         let _lastT = performance.now();
