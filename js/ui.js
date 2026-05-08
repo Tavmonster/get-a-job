@@ -81,14 +81,14 @@ const UI = (() => {
         hudText.alpha = 0;
         advTexture.addControl(hudText);
 
-        // ── Hunger bar (top-left, row 3) ────────────────────────────────
+        // ── Hunger bar (top-right, below money) ────────────────────────────
         hungerRow = new BABYLON.GUI.StackPanel("hungerRow");
         hungerRow.isVertical = false;
         hungerRow.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
-        hungerRow.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+        hungerRow.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT;
         hungerRow.height = "30px";
-        hungerRow.left = "16px";
-        hungerRow.top = "82px";
+        hungerRow.left = "-16px";
+        hungerRow.top = "44px";
         hungerRow.alpha = 1;
         advTexture.addControl(hungerRow);
 

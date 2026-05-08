@@ -160,7 +160,7 @@
     window.addEventListener('touchend',    _endStick);
     window.addEventListener('touchcancel', _endStick);
 
-    // ── Look zone: any touchstart on the right half (not on joystick/E btn) ──
+    // ── Look zone: any touchstart on the right half ON THE CANVAS (not DOM overlays) ──
 
     window.addEventListener('touchstart', (e) => {
         if (lookTouchId !== null) return;   // already tracking a look finger
@@ -170,6 +170,11 @@
             if (t.clientX < window.innerWidth * 0.45) continue;
             // Must not already be the stick touch
             if (t.identifier === stickTouchId) continue;
+            // Only claim touches that land directly on the game canvas —
+            // this prevents swallowing taps on DOM overlays (interview panel,
+            // cutscene buttons, etc.) which would stop click events firing.
+            const hit = document.elementFromPoint(t.clientX, t.clientY);
+            if (!hit || hit.id !== 'renderCanvas') continue;
             lookTouchId = t.identifier;
             lookLastX   = t.clientX;
             break;
