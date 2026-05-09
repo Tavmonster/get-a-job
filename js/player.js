@@ -4,8 +4,8 @@
 const Player = (() => {
     let mesh = null;
     let scene = null;
-    const SPEED = 0.1125;
-    const GRAVITY = -0.015;
+    const SPEED = 0.169;
+    const GRAVITY = -0.0225;
     let velY = 0;
     let enabled = true;
 
@@ -156,7 +156,7 @@ const Player = (() => {
     // ── Knockback state ───────────────────────────────────────────────
     let knockbackVelX = 0;
     let knockbackVelZ = 0;
-    const KNOCKBACK_FORCE = 0.5;   // initial speed applied on hit
+    const KNOCKBACK_FORCE = 0.75;   // initial speed applied on hit
     const KNOCKBACK_DECAY = 0.88;  // per-frame velocity decay
     const KNOCKBACK_MIN   = 0.005; // velocity magnitude below which we zero out
 
@@ -169,7 +169,7 @@ const Player = (() => {
         knockbackVelZ = (dirZ / len) * KNOCKBACK_FORCE;
     }
 
-    function update() {
+    function update(dt) {
         if (!mesh || !enabled) return;
 
         // ── No rotation via keys — A/D and arrows all strafe ─────────
@@ -189,12 +189,17 @@ const Player = (() => {
         const fx = Math.sin(fy) * moveZ * SPEED + Math.cos(fy) * moveX * SPEED;
         const fz = Math.cos(fy) * moveZ * SPEED - Math.sin(fy) * moveX * SPEED;
 
-        velY += GRAVITY;
-        mesh.moveWithCollisions(new BABYLON.Vector3(fx + knockbackVelX, velY, fz + knockbackVelZ));
+        velY += GRAVITY * dt;
+        mesh.moveWithCollisions(new BABYLON.Vector3(
+            (fx + knockbackVelX) * dt,
+            velY * dt,
+            (fz + knockbackVelZ) * dt
+        ));
 
-        // Decay knockback each frame
-        knockbackVelX *= KNOCKBACK_DECAY;
-        knockbackVelZ *= KNOCKBACK_DECAY;
+        // Decay knockback (frame-rate independent)
+        const kbDecay = Math.pow(KNOCKBACK_DECAY, dt);
+        knockbackVelX *= kbDecay;
+        knockbackVelZ *= kbDecay;
         if (Math.abs(knockbackVelX) < KNOCKBACK_MIN && Math.abs(knockbackVelZ) < KNOCKBACK_MIN) {
             knockbackVelX = 0;
             knockbackVelZ = 0;
@@ -208,7 +213,7 @@ const Player = (() => {
         // ── Walking animation ─────────────────────────────────────────
         const isWalking = moveZ !== 0 || moveX !== 0;
         if (isWalking) {
-            walkTime += 0.15;
+            walkTime += 0.225 * dt;
             const legSwing = Math.sin(walkTime) * 0.45;
             legPivotL.rotation.x =  legSwing;
             legPivotR.rotation.x = -legSwing;
@@ -216,11 +221,12 @@ const Player = (() => {
             armPivotL.rotation.x = -legSwing * 0.5;
             armPivotR.rotation.x =  legSwing * 0.5;
         } else {
-            // Smoothly return limbs to rest (idle) position
-            legPivotL.rotation.x *= 0.8;
-            legPivotR.rotation.x *= 0.8;
-            armPivotL.rotation.x *= 0.8;
-            armPivotR.rotation.x *= 0.8;
+            // Smoothly return limbs to rest (idle) — frame-rate independent
+            const limbDecay = Math.pow(0.8, dt);
+            legPivotL.rotation.x *= limbDecay;
+            legPivotR.rotation.x *= limbDecay;
+            armPivotL.rotation.x *= limbDecay;
+            armPivotR.rotation.x *= limbDecay;
             if (Math.abs(legPivotL.rotation.x) < 0.005) legPivotL.rotation.x = 0;
             if (Math.abs(legPivotR.rotation.x) < 0.005) legPivotR.rotation.x = 0;
             if (Math.abs(armPivotL.rotation.x) < 0.005) armPivotL.rotation.x = 0;

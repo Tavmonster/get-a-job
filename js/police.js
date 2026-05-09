@@ -17,9 +17,9 @@
  *   of the police car pivot (patrol or chase).
  */
 const PoliceCar = (() => {
-    const PATROL_SPEED  = 0.085;
-    const CHASE_SPEED   = 0.20;
-    const TURN_SPEED    = 0.13;    // rad/frame max yaw rate
+    const PATROL_SPEED  = 0.1275;
+    const CHASE_SPEED   = 0.30;
+    const TURN_SPEED    = 0.195;    // rad/frame max yaw rate
     const REACH_DIST    = 2.0;     // waypoint snap distance (tight to prevent corner overshoot)
     const ARREST_DIST   = 6.5;     // catch / arrest distance (must be > truck half-depth 4.5)
     const CHASE_BRAKE_START = 10.0; // begin slowing at this distance in chase mode
@@ -134,6 +134,7 @@ const PoliceCar = (() => {
     let _speedMult = 1.0;
     let _lightLMat = null;
     let _lightRMat = null;
+    let _lastLightPhase = -1;
 
     // ── Mesh builder ─────────────────────────────────────────────────────
     function buildCar(scene) {
@@ -297,17 +298,20 @@ const PoliceCar = (() => {
 
     function getPivot() { return pivot_; }
 
-    function update() {
+    function update(dt) {
         if (state === 'inactive' || !pivot_) return;
         _frame++;
 
         // ── Flashing lights ─────────────────────────────────────────────
         if (_lightLMat && _lightRMat) {
             const phase = Math.floor(_frame / LIGHT_PERIOD) & 1;
-            _lightLMat.diffuseColor  = phase === 0 ? RED : OFF;
-            _lightLMat.emissiveColor = phase === 0 ? RED : OFF;
-            _lightRMat.diffuseColor  = phase === 0 ? OFF : BLUE;
-            _lightRMat.emissiveColor = phase === 0 ? OFF : BLUE;
+            if (phase !== _lastLightPhase) {
+                _lastLightPhase = phase;
+                _lightLMat.diffuseColor  = phase === 0 ? RED : OFF;
+                _lightLMat.emissiveColor = phase === 0 ? RED : OFF;
+                _lightRMat.diffuseColor  = phase === 0 ? OFF : BLUE;
+                _lightRMat.emissiveColor = phase === 0 ? OFF : BLUE;
+            }
         }
 
         const speed = state === 'chase' ? CHASE_SPEED : PATROL_SPEED;
@@ -497,7 +501,7 @@ const PoliceCar = (() => {
             while (diff >  Math.PI) diff -= 2 * Math.PI;
             while (diff < -Math.PI) diff += 2 * Math.PI;
             const turn = Math.max(-TURN_SPEED, Math.min(TURN_SPEED, diff));
-            pivot_.rotation.y += turn;
+            pivot_.rotation.y += turn * dt;
             // Squared cosine: drops to near-zero much faster for large angles,
             // so the car is nearly stopped before it has finished turning the corner.
             alignMult = Math.pow(Math.max(0, Math.cos(diff)), 2);
@@ -506,8 +510,8 @@ const PoliceCar = (() => {
         // ── Move ─────────────────────────────────────────────────────────
         const sinY = Math.sin(pivot_.rotation.y);
         const cosY = Math.cos(pivot_.rotation.y);
-        pivot_.position.x += sinY * speed * _speedMult * alignMult;
-        pivot_.position.z += cosY * speed * _speedMult * alignMult;
+        pivot_.position.x += sinY * speed * _speedMult * alignMult * dt;
+        pivot_.position.z += cosY * speed * _speedMult * alignMult * dt;
         pivot_.position.y  = 0;
 
         // Clamp to park zone during park-direct chase to prevent crossing into

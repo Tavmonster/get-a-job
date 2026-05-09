@@ -14,8 +14,8 @@
  * Fixes get-a-job-2vs
  */
 const NPCCars = (() => {
-    const CAR_SPEED      = 0.075;   // units/frame cruise speed
-    const TURN_SPEED     = 0.06;   // rad/frame max yaw rate
+    const CAR_SPEED      = 0.1125;   // units/frame cruise speed
+    const TURN_SPEED     = 0.09;   // rad/frame max yaw rate
     const REACH_DIST     = 4.5;    // waypoint snap distance (units)
     const LOOK_AHEAD     = 9.0;    // avoidance ray length (units)
     const STOP_DIST      = 3.5;    // full-stop distance (units)
@@ -188,7 +188,7 @@ const NPCCars = (() => {
 
     let frameCount = 0;
 
-    function update() {
+    function update(dt) {
         frameCount++;
         const doRaycasts = (frameCount % RAY_INTERVAL) === 0;
 
@@ -221,7 +221,7 @@ const NPCCars = (() => {
                 while (diff >  Math.PI) diff -= 2 * Math.PI;
                 while (diff < -Math.PI) diff += 2 * Math.PI;
                 const turn = Math.max(-TURN_SPEED, Math.min(TURN_SPEED, diff));
-                car.pivot.rotation.y += turn;
+                car.pivot.rotation.y += turn * dt;
                 // cos(0)=1 fully aligned, cos(π/2)=0 at 90°, clamped to [0,1]
                 alignMult = Math.max(0, Math.cos(diff));
             }
@@ -265,8 +265,8 @@ const NPCCars = (() => {
             const sinY = Math.sin(car.pivot.rotation.y);
             const cosY = Math.cos(car.pivot.rotation.y);
             const mv = car.speed * speedMult * alignMult;
-            pos.x += sinY * mv;
-            pos.z += cosY * mv;
+            pos.x += sinY * mv * dt;
+            pos.z += cosY * mv * dt;
             pos.y  = 0;
             // ── Player knockback ──────────────────────────────────────────
             const playerPos = Player.getPosition();

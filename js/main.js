@@ -42,22 +42,21 @@
         const _DN_NIGHT_FOG   = new BABYLON.Color3(0.02, 0.02, 0.05);
         const _DN_DAY_SKY     = { r: 0.53, g: 0.81, b: 0.98 };
         const _DN_NIGHT_SKY   = { r: 0.03, g: 0.03, b: 0.10 };
-        function _lerpC3(a, b, t) {
-            return new BABYLON.Color3(
-                a.r + (b.r - a.r) * t,
-                a.g + (b.g - a.g) * t,
-                a.b + (b.b - a.b) * t
-            );
-        }
         function _applyNightT(t) {
-            sun.intensity       = _DN_DAY_SUN_I + (_DN_NIGHT_SUN_I - _DN_DAY_SUN_I) * t;
-            sun.diffuse         = _lerpC3(_DN_DAY_SUN_D, _DN_NIGHT_SUN_D, t);
-            ambient.intensity   = _DN_DAY_AMB_I + (_DN_NIGHT_AMB_I - _DN_DAY_AMB_I) * t;
-            ambient.groundColor = _lerpC3(_DN_DAY_GND, _DN_NIGHT_GND, t);
-            scene.clearColor.r  = _DN_DAY_SKY.r + (_DN_NIGHT_SKY.r - _DN_DAY_SKY.r) * t;
-            scene.clearColor.g  = _DN_DAY_SKY.g + (_DN_NIGHT_SKY.g - _DN_DAY_SKY.g) * t;
-            scene.clearColor.b  = _DN_DAY_SKY.b + (_DN_NIGHT_SKY.b - _DN_DAY_SKY.b) * t;
-            scene.fogColor      = _lerpC3(_DN_DAY_FOG, _DN_NIGHT_FOG, t);
+            sun.intensity         = _DN_DAY_SUN_I + (_DN_NIGHT_SUN_I - _DN_DAY_SUN_I) * t;
+            sun.diffuse.r         = _DN_DAY_SUN_D.r + (_DN_NIGHT_SUN_D.r - _DN_DAY_SUN_D.r) * t;
+            sun.diffuse.g         = _DN_DAY_SUN_D.g + (_DN_NIGHT_SUN_D.g - _DN_DAY_SUN_D.g) * t;
+            sun.diffuse.b         = _DN_DAY_SUN_D.b + (_DN_NIGHT_SUN_D.b - _DN_DAY_SUN_D.b) * t;
+            ambient.intensity     = _DN_DAY_AMB_I + (_DN_NIGHT_AMB_I - _DN_DAY_AMB_I) * t;
+            ambient.groundColor.r = _DN_DAY_GND.r + (_DN_NIGHT_GND.r - _DN_DAY_GND.r) * t;
+            ambient.groundColor.g = _DN_DAY_GND.g + (_DN_NIGHT_GND.g - _DN_DAY_GND.g) * t;
+            ambient.groundColor.b = _DN_DAY_GND.b + (_DN_NIGHT_GND.b - _DN_DAY_GND.b) * t;
+            scene.clearColor.r    = _DN_DAY_SKY.r + (_DN_NIGHT_SKY.r - _DN_DAY_SKY.r) * t;
+            scene.clearColor.g    = _DN_DAY_SKY.g + (_DN_NIGHT_SKY.g - _DN_DAY_SKY.g) * t;
+            scene.clearColor.b    = _DN_DAY_SKY.b + (_DN_NIGHT_SKY.b - _DN_DAY_SKY.b) * t;
+            scene.fogColor.r      = _DN_DAY_FOG.r + (_DN_NIGHT_FOG.r - _DN_DAY_FOG.r) * t;
+            scene.fogColor.g      = _DN_DAY_FOG.g + (_DN_NIGHT_FOG.g - _DN_DAY_FOG.g) * t;
+            scene.fogColor.b      = _DN_DAY_FOG.b + (_DN_NIGHT_FOG.b - _DN_DAY_FOG.b) * t;
         }
 
         // ── Fog ─────────────────────────────────────────────────────
@@ -71,6 +70,10 @@
 
         // ── Player ──────────────────────────────────────────────────
         const playerMesh = Player.init(scene);
+        // Cache child meshes (static after init) and pre-allocate FPV target vector
+        // to avoid per-frame allocations in the render loop.
+        const _playerChildMeshes = playerMesh.getChildMeshes();
+        const _fpvTarget = new BABYLON.Vector3();
 
         // ── Camera ──────────────────────────────────────────────────
         const mainCamera = GameCamera.init(scene, playerMesh, canvas);
@@ -82,7 +85,7 @@
         UI.init(scene);
 
         // ── Door animation state ───────────────────────────────────
-        const _DOOR_SPEED = 0.08;  // radians per frame
+        const _DOOR_SPEED = 0.12;  // radians per frame
 
         // ── Pointer lock helpers ───────────────────────────────────
         // Flag set when WE release the lock (DOM overlays), so pointerlockchange
@@ -433,6 +436,9 @@
 
         // ── Render loop ──────────────────────────────────────────────
         scene.registerBeforeRender(() => {
+            // dt = 1.0 at 60 fps; proportionally less/more at other rates.
+            // Capped at 3 to prevent huge jumps after the tab regains focus.
+            const dt = Math.min(engine.getDeltaTime() / (1000 / 60), 3);
             const gs = GameState.get();
             const S  = GameState.STATES;
             const playerPos = Player.getPosition();
@@ -451,12 +457,12 @@
             }
 
             // ── NPCs ────────────────────────────────────────────
-            NPCSystem.update();
+            NPCSystem.update(dt);
 
             // ── NPC Cars ─────────────────────────────────────────
-            NPCCars.update();
+            NPCCars.update(dt);
             // ── Police Car ───────────────────────────────────────
-            PoliceCar.update();
+            PoliceCar.update(dt);
 
             // Pedestrian hit: alert police when truck drives into an NPC
             // Require the truck to be moving (speed > 0.05) so stationary NPCs
@@ -487,7 +493,7 @@
                 const _curRot = storeData.doorPivot.rotation.y;
                 if (Math.abs(_curRot - _targetRot) > 0.001) {
                     storeData.doorPivot.rotation.y += Math.sign(_targetRot - _curRot) *
-                        Math.min(Math.abs(_targetRot - _curRot), _DOOR_SPEED);
+                        Math.min(Math.abs(_targetRot - _curRot), _DOOR_SPEED * dt);
                 }
             }
 
@@ -503,7 +509,7 @@
                 const _ffCurRot = fastFoodData.doorPivot.rotation.y;
                 if (Math.abs(_ffCurRot - _ffTargetRot) > 0.001) {
                     fastFoodData.doorPivot.rotation.y += Math.sign(_ffTargetRot - _ffCurRot) *
-                        Math.min(Math.abs(_ffTargetRot - _ffCurRot), _DOOR_SPEED);
+                        Math.min(Math.abs(_ffTargetRot - _ffCurRot), _DOOR_SPEED * dt);
                 }
             }
 
@@ -520,7 +526,7 @@
             if (_insideStore || _insideFF) {
                 Player.setFPV(true);
                 // Hide player body so it doesn't clip into view
-                playerMesh.getChildMeshes().forEach(m => { m.isVisible = false; });
+                _playerChildMeshes.forEach(m => { m.isVisible = false; });
                 const _cam  = GameCamera.getCamera();
                 const _eyeY = playerMesh.position.y + 0.64;
                 const _yaw  = playerMesh.rotation.y;
@@ -530,11 +536,12 @@
                 const _lz = playerMesh.position.z + Math.cos(_yaw) * _lookDist * Math.cos(_fpvPitch);
                 const _ly = _eyeY - Math.sin(_fpvPitch) * _lookDist;
                 _cam.position.set(playerMesh.position.x, _eyeY, playerMesh.position.z);
-                _cam.setTarget(new BABYLON.Vector3(_lx, _ly, _lz));
+                _fpvTarget.set(_lx, _ly, _lz);
+                _cam.setTarget(_fpvTarget);
             } else {
                 Player.setFPV(false);
                 // Restore player body visibility when outside store
-                playerMesh.getChildMeshes().forEach(m => { m.isVisible = true; });
+                _playerChildMeshes.forEach(m => { m.isVisible = true; });
                 // Don't force-release pointer lock outside store — keep it locked globally
                 _fpvPitch = 0;
                 GameCamera.update();
@@ -542,13 +549,13 @@
 
             // ── Walking states ──────────────────────────────────────
             if (gs === S.WALK_TO_STORE || gs === S.PAYDAY || gs === S.FAST_FOOD || gs === S.HOTEL) {
-                Player.update();
+                Player.update(dt);
             }
 
             // ── Driving states ──────────────────────────────────────
             if (gs === S.DELIVERING || gs === S.RETURN_DEPOT) {
                 if (Truck.isDrivingActive()) {
-                    Truck.update();
+                    Truck.update(dt);
                     if (Packages.checkDeliveries(truckPos)) {
                         hunger = Math.max(0, hunger - 20);
                         UI.setHunger(hunger);
@@ -557,7 +564,7 @@
                         }
                     }
                 } else {
-                    Player.update();
+                    Player.update(dt);
                 }
             }
 
@@ -752,16 +759,10 @@
     // ── Resize handler ───────────────────────────────────────────────
     window.addEventListener("resize", () => engine.resize());
 
-    // ── Start render loop (manual 60 fps cap) ────────────────────────
-    // Babylon's runRenderLoop already uses requestAnimationFrame (display-rate
-    // capped), but adding an explicit time gate ensures we never burn CPU on
-    // displays/drivers that fire rAF faster than 60 Hz.
+    // ── Start render loop ────────────────────────────────────────────
     let _lastRender = 0;
     const _frameMs  = 1000 / 60;
     engine.runRenderLoop(() => {
-        // const now = performance.now();
-        // if (now - _lastRender < _frameMs) return;
-        // _lastRender = now;
         scene.render();
     });
 

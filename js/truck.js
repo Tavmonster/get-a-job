@@ -5,9 +5,9 @@ const Truck = (() => {
     let mesh = null;
     let scene = null;
     let driving = false;
-    const MAX_SPEED  = 0.18;
-    const ACCEL      = 0.0075;
-    const TURN_SPEED = 0.018;   // radians per frame at full speed
+    const MAX_SPEED  = 0.27;
+    const ACCEL      = 0.01125;
+    const TURN_SPEED = 0.027;   // radians per frame at full speed
     let speed = 0;
 
     function init(babylonScene) {
@@ -86,22 +86,22 @@ const Truck = (() => {
         return mesh;
     }
 
-    function update() {
+    function update(dt) {
         if (!mesh || !driving) return;
 
         // Acceleration / braking
         if (Input.isHeld("KeyW") || Input.isHeld("ArrowUp")) {
-            speed = Math.min(speed + ACCEL, MAX_SPEED);
+            speed = Math.min(speed + ACCEL * dt, MAX_SPEED);
         } else if (Input.isHeld("KeyS") || Input.isHeld("ArrowDown")) {
-            speed = Math.max(speed - ACCEL * 1.5, -MAX_SPEED * 0.4);
+            speed = Math.max(speed - ACCEL * 1.5 * dt, -MAX_SPEED * 0.4);
         } else {
-            speed *= 0.96;
+            speed *= Math.pow(0.96, dt);
             if (Math.abs(speed) < 0.001) speed = 0;
         }
 
         // Steering: direct rotation scaled by speed so it's weaker at low speed
         if (Math.abs(speed) > 0.005) {
-            const turnAmount = TURN_SPEED * (Math.abs(speed) / MAX_SPEED) * Math.sign(speed);
+            const turnAmount = TURN_SPEED * dt * (Math.abs(speed) / MAX_SPEED) * Math.sign(speed);
             if (Input.isHeld("KeyA") || Input.isHeld("ArrowLeft"))       mesh.rotation.y -= turnAmount;
             else if (Input.isHeld("KeyD") || Input.isHeld("ArrowRight")) mesh.rotation.y += turnAmount;
         }
@@ -124,7 +124,7 @@ const Truck = (() => {
             const dir      = Math.sign(speed);
             const leadZ    = dir > 0 ? 4.5 : -5.5;
             const halfW    = 1.6;   // slightly inside half-width to avoid grazing
-            const rayLen   = Math.abs(speed) + 0.4;
+            const rayLen   = Math.abs(speed) * dt + 0.4;
             const rayDir   = forward.scale(dir);
 
             const base        = new BABYLON.Vector3(mesh.position.x, 1.5, mesh.position.z);
@@ -149,8 +149,8 @@ const Truck = (() => {
             });
 
             if (!blocked) {
-                mesh.position.x += forward.x * speed;
-                mesh.position.z += forward.z * speed;
+                mesh.position.x += forward.x * speed * dt;
+                mesh.position.z += forward.z * speed * dt;
             } else {
                 speed = 0; // stop on impact
             }

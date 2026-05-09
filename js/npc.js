@@ -17,7 +17,7 @@
  */
 const NPCSystem = (() => {
 
-    const SPEED = 0.0375;  // units per frame
+    const SPEED = 0.05625;  // units per frame
     const REACH = 0.8;   // distance to count waypoint as reached
     let _frame  = 0;
 
@@ -183,7 +183,7 @@ const NPCSystem = (() => {
         });
     }
 
-    function update() {
+    function update(dt) {
         _frame++;
         const animFrame = (_frame & 1) === 0; // update limb rotations every other frame
 
@@ -211,12 +211,12 @@ const NPCSystem = (() => {
                 }
             } else {
                 npc.root.rotation.y = Math.atan2(dx, dz);
-                pos.x += (dx / dist) * SPEED;
-                pos.z += (dz / dist) * SPEED;
+                pos.x += (dx / dist) * SPEED * dt;
+                pos.z += (dz / dist) * SPEED * dt;
                 pos.y  = 1.0;
 
                 if (animFrame) {
-                    npc.phase += 0.20; // doubled since we update half as often
+                    npc.phase += 0.30 * dt; // doubled since we update half as often
                     const swing = Math.sin(npc.phase) * 0.45;
                     npc.legL.rotation.x =  swing;
                     npc.legR.rotation.x = -swing;
