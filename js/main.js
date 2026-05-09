@@ -26,6 +26,40 @@
         ambient.intensity = 0.5;
         ambient.groundColor = new BABYLON.Color3(0.3, 0.5, 0.3);
 
+        // ── Day-night cycle ──────────────────────────────────────────
+        // nightT: 0 = full day, 1 = full night.
+        // Advances from 0→1 over _NIGHT_MS once DELIVERING starts.
+        let _nightT      = 0;
+        let _nightActive = false;
+        const _NIGHT_MS  = 360000; // 6 min real-time from first delivery to full night
+        const _DN_DAY_SUN_I   = 1.2,   _DN_NIGHT_SUN_I   = 0.0;
+        const _DN_DAY_AMB_I   = 0.5,   _DN_NIGHT_AMB_I   = 0.1;
+        const _DN_DAY_SUN_D   = new BABYLON.Color3(1, 0.97, 0.85);
+        const _DN_NIGHT_SUN_D = new BABYLON.Color3(0.05, 0.05, 0.3);
+        const _DN_DAY_GND     = new BABYLON.Color3(0.3, 0.5, 0.3);
+        const _DN_NIGHT_GND   = new BABYLON.Color3(0.02, 0.02, 0.1);
+        const _DN_DAY_FOG     = new BABYLON.Color3(0.75, 0.88, 1.0);
+        const _DN_NIGHT_FOG   = new BABYLON.Color3(0.02, 0.02, 0.05);
+        const _DN_DAY_SKY     = { r: 0.53, g: 0.81, b: 0.98 };
+        const _DN_NIGHT_SKY   = { r: 0.03, g: 0.03, b: 0.10 };
+        function _lerpC3(a, b, t) {
+            return new BABYLON.Color3(
+                a.r + (b.r - a.r) * t,
+                a.g + (b.g - a.g) * t,
+                a.b + (b.b - a.b) * t
+            );
+        }
+        function _applyNightT(t) {
+            sun.intensity       = _DN_DAY_SUN_I + (_DN_NIGHT_SUN_I - _DN_DAY_SUN_I) * t;
+            sun.diffuse         = _lerpC3(_DN_DAY_SUN_D, _DN_NIGHT_SUN_D, t);
+            ambient.intensity   = _DN_DAY_AMB_I + (_DN_NIGHT_AMB_I - _DN_DAY_AMB_I) * t;
+            ambient.groundColor = _lerpC3(_DN_DAY_GND, _DN_NIGHT_GND, t);
+            scene.clearColor.r  = _DN_DAY_SKY.r + (_DN_NIGHT_SKY.r - _DN_DAY_SKY.r) * t;
+            scene.clearColor.g  = _DN_DAY_SKY.g + (_DN_NIGHT_SKY.g - _DN_DAY_SKY.g) * t;
+            scene.clearColor.b  = _DN_DAY_SKY.b + (_DN_NIGHT_SKY.b - _DN_DAY_SKY.b) * t;
+            scene.fogColor      = _lerpC3(_DN_DAY_FOG, _DN_NIGHT_FOG, t);
+        }
+
         // ── Fog ─────────────────────────────────────────────────────
         scene.fogMode = BABYLON.Scene.FOGMODE_LINEAR;
         scene.fogColor = new BABYLON.Color3(0.75, 0.88, 1.0);
@@ -92,7 +126,21 @@
                          Math.min( _FPV_PITCH_MAX, _fpvPitch + e.movementY * _FPV_SENS));
         });
 
-        Minimap.init(scene, mainCamera);        const playerDot = Minimap.createDot(scene, "#4488ff", 9);
+        Minimap.init(scene, mainCamera);
+
+        // Protect minimap from day-night darkening: temporarily restore day
+        // lighting while the minimap camera renders, then reapply night values.
+        const _minimapCam = Minimap.getCamera();
+        scene.onBeforeCameraRenderObservable.add((cam) => {
+            if (cam !== _minimapCam || _nightT === 0) return;
+            _applyNightT(0);
+        });
+        scene.onAfterCameraRenderObservable.add((cam) => {
+            if (cam !== _minimapCam || _nightT === 0) return;
+            _applyNightT(_nightT);
+        });
+
+        const playerDot = Minimap.createDot(scene, "#4488ff", 9);
         const truckDot  = Minimap.createDot(scene, "#ffaa00", 9);
         const policeDot = Minimap.createDot(scene, "#ff2222", 11);
         // Prevent Babylon GUI (text, HUD, hints) from rendering over the minimap.
@@ -175,6 +223,8 @@
                     UI.showText("Drive to each marked house and deliver the packages!", 4000);
                     // Hide single objective — delivery markers on minimap serve as targets
                     Minimap.setObjective(null);
+                    // Begin gradual day-to-night transition
+                    _nightActive = true;
                     break;
 
                 case GameState.STATES.RETURN_DEPOT:
@@ -394,6 +444,12 @@
                 else _showDebugPanel();
             }
 
+            // ── Day-night cycle ──────────────────────────────────────────
+            if (_nightActive && _nightT < 1) {
+                _nightT = Math.min(1, _nightT + engine.getDeltaTime() / _NIGHT_MS);
+                _applyNightT(_nightT);
+            }
+
             // ── NPCs ────────────────────────────────────────────
             NPCSystem.update();
 
@@ -435,13 +491,33 @@
                 }
             }
 
+            // ── Burger Barn door animation ────────────────────────────────────────
+            // Locked during PAYDAY and FAST_FOOD — the cutscene owns the door
+            // in FAST_FOOD so we don't want it auto-opening before pressing E.
+            const _ffDoorUnlocked = gs !== S.INTRO && gs !== S.PAYDAY && gs !== S.FAST_FOOD;
+            if (fastFoodData && fastFoodData.doorPivot && _ffDoorUnlocked) {
+                const _fdz = playerPos.z - fastFoodData.pos.z;
+                const _fdx = playerPos.x - fastFoodData.pos.x;
+                const _nearFFDoor = Math.abs(_fdx) < 4 && _fdz > -8 && _fdz < -3.5;
+                const _ffTargetRot = _nearFFDoor ? fastFoodData.doorOpenRot : 0;
+                const _ffCurRot = fastFoodData.doorPivot.rotation.y;
+                if (Math.abs(_ffCurRot - _ffTargetRot) > 0.001) {
+                    fastFoodData.doorPivot.rotation.y += Math.sign(_ffTargetRot - _ffCurRot) *
+                        Math.min(Math.abs(_ffTargetRot - _ffCurRot), _DOOR_SPEED);
+                }
+            }
+
             // ── Camera ─────────────────────────────────────────
-            // First-person whenever the player is inside the store building.
+            // First-person whenever the player is inside the store or burger barn.
             const _insideStore = storeData &&
                 Math.abs(playerPos.x - storeData.pos.x) < 7 &&
                 playerPos.z > storeData.pos.z - 7 &&
                 playerPos.z < storeData.pos.z + 7;
-            if (_insideStore) {
+            const _insideFF = fastFoodData &&
+                Math.abs(playerPos.x - fastFoodData.pos.x) < 6 &&
+                playerPos.z > fastFoodData.pos.z - 6 &&
+                playerPos.z < fastFoodData.pos.z + 6;
+            if (_insideStore || _insideFF) {
                 Player.setFPV(true);
                 // Hide player body so it doesn't clip into view
                 playerMesh.getChildMeshes().forEach(m => { m.isVisible = false; });
@@ -612,17 +688,22 @@
                     if (interactHintActive !== "fastfood") {
                         UI.showInteractHint("Press E to buy a meal ($10)");
                         interactHintActive = "fastfood";
+                        Input.flushPress("KeyE"); // discard any pre-buffered presses
                     }
                     if (Input.consumePress("KeyE")) {
                         UI.hideInteractHint();
                         // Keep interactHintActive = "fastfood" so the hint doesn't
                         // re-appear on the next frame while the cutscene is playing.
-                        Cutscene.play('fastfood', () => {
-                            hunger = 100;
-                            UI.setHunger(hunger);
-                            UI.setMoney(90);
-                            GameState.set(S.HOTEL);
-                        });
+                        Cutscene.playFastFoodCutscene(
+                            scene, playerMesh, GameCamera.getCamera(),
+                            fastFoodData,
+                            () => {
+                                hunger = 100;
+                                UI.setHunger(hunger);
+                                UI.setMoney(90);
+                                GameState.set(S.HOTEL);
+                            }
+                        );
                     }
                 } else {
                     if (interactHintActive === "fastfood") {

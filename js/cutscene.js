@@ -1345,10 +1345,304 @@ const Cutscene = (() => {
         });
     }
 
+    // ── In-engine fast-food cutscene ──────────────────────────────────
+    // Player walks into Burger Barn, orders at the counter, receives a
+    // burger bag, and walks back out.
+    // fastFoodData: World.getSpecialBuilding("fastfood") — needs .pos and .doorPivot.
+    function playFastFoodCutscene(scene, playerMesh, cam, fastFoodData, onComplete) {
+        _active = true;
+
+        const FX = fastFoodData.pos.x;
+        const FZ = fastFoodData.pos.z;
+        const D  = 13;
+
+        const FRONT_Z      = FZ - D / 2;       // south face of building (FZ - 6.5)
+        const DOOR_OPEN    = -Math.PI / 2;      // door swings west (same convention as store)
+        const COUNTER_N_Z  = FZ - 1.8;         // cashier stands here (north of counter)
+        const COUNTER_S_Z  = FZ - 4.5;         // player stops here   (south of counter)
+
+        // ── Cashier NPC ────────────────────────────────────────────────
+        // Hide the permanent cashier so only the cutscene's own NPC is visible.
+        if (fastFoodData.cashierRoot) fastFoodData.cashierRoot.setEnabled(false);
+
+        const {
+            root: cshMesh,
+            disposeAll: disposeCsh,
+        } = buildSimpleCharacter(scene, {
+            skin:  [0.85, 0.65, 0.45],
+            hair:  [0.55, 0.30, 0.10],
+            shirt: [0.82, 0.22, 0.08],   // Burger Barn red
+            pants: [0.15, 0.15, 0.18],
+        });
+        cshMesh.position.set(FX, 1, COUNTER_N_Z);
+        cshMesh.rotation.y = Math.PI;   // faces south toward player
+
+        // Visor cap — same geometry/colours as the permanent cashier NPC
+        const _capMat = new BABYLON.StandardMaterial("cs_cshCapMat_" + Math.random(), scene);
+        _capMat.diffuseColor = new BABYLON.Color3(0.6, 0.07, 0.0);
+        const cshCap = BABYLON.MeshBuilder.CreateCylinder(
+            "cs_cshCap", { height: 0.17, diameterTop: 0.34, diameterBottom: 0.46, tessellation: 8 }, scene);
+        cshCap.material = _capMat;
+        cshCap.position.set(0, 0.85, 0.05);
+        cshCap.parent = cshMesh;
+        const cshBrim = BABYLON.MeshBuilder.CreateBox(
+            "cs_cshBrim", { width: 0.54, height: 0.05, depth: 0.28 }, scene);
+        cshBrim.material = _capMat;
+        cshBrim.position.set(0, 0.77, 0.26);   // local +Z = front (cashier faces south w/ rot.y=PI)
+        cshBrim.parent = cshMesh;
+
+        // ── Burger bag prop ────────────────────────────────────────────
+        const burger = BABYLON.MeshBuilder.CreateBox(
+            "cs_burger", { width: 0.28, height: 0.24, depth: 0.28 }, scene);
+        const burgerMat = new BABYLON.StandardMaterial("cs_burgerMat_" + Math.random(), scene);
+        burgerMat.diffuseColor  = new BABYLON.Color3(0.95, 0.62, 0.10);
+        burgerMat.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+        burger.material = burgerMat;
+        burger.setEnabled(false);
+
+        // ── Place player outside ───────────────────────────────────────
+        playerMesh.position.set(FX, 1, FRONT_Z - 2.5);
+        playerMesh.rotation.y = 0;
+        playerMesh.rotation.z = 0;
+
+        const plyArmPivotR = scene.getNodeByName("armPivotR");
+
+        // ── Helpers ────────────────────────────────────────────────────
+        function eio(t)     { return t < 0.5 ? 2*t*t : -1 + (4 - 2*t)*t; }
+        function clamp01(t) { return Math.max(0, Math.min(1, t)); }
+        function moveToward(mesh, tx, tz, speed, dt) {
+            const dx = tx - mesh.position.x;
+            const dz = tz - mesh.position.z;
+            const dist = Math.sqrt(dx*dx + dz*dz);
+            const step = speed * dt;
+            if (dist <= step) { mesh.position.x = tx; mesh.position.z = tz; return true; }
+            mesh.position.x += (dx / dist) * step;
+            mesh.position.z += (dz / dist) * step;
+            mesh.rotation.y  = Math.atan2(dx, dz);
+            return false;
+        }
+
+        const EYE_STAND = 1.65;
+        let   eyeHeight = EYE_STAND;
+
+        function fpvForward() {
+            const ey = playerMesh.position.y + eyeHeight;
+            cam.position.set(playerMesh.position.x, ey, playerMesh.position.z);
+            const fx = Math.sin(playerMesh.rotation.y);
+            const fz = Math.cos(playerMesh.rotation.y);
+            cam.setTarget(new BABYLON.Vector3(
+                playerMesh.position.x + fx * 8, ey - 0.1,
+                playerMesh.position.z + fz * 8));
+        }
+        function fpvLookAt(tx, ty, tz) {
+            const ey = playerMesh.position.y + eyeHeight;
+            cam.position.set(playerMesh.position.x, ey, playerMesh.position.z);
+            cam.setTarget(new BABYLON.Vector3(tx, ty, tz));
+        }
+
+        const WALK_SPEED = 0.0036;
+        let phase = 0;
+        const phases = [];
+        const timers = [];
+        function sub(text, dur, delay) { timers.push(setTimeout(() => UI.showText(text, dur), delay)); }
+
+        // Phase 0 — pause outside, look at building (1200 ms) ──────────
+        let p0e = 0;
+        phases.push((dt) => {
+            p0e += dt;
+            fpvLookAt(FX, 2.2, FRONT_Z);
+            return p0e > 1200;
+        });
+
+        // Phase 1 — door swings open (800 ms) ───────────────────────────
+        const p1DoorStart = fastFoodData.doorPivot ? fastFoodData.doorPivot.rotation.y : 0;
+        let p1e = 0;
+        phases.push((dt) => {
+            p1e += dt;
+            const t = clamp01(p1e / 800);
+            if (fastFoodData.doorPivot)
+                fastFoodData.doorPivot.rotation.y = p1DoorStart + (DOOR_OPEN - p1DoorStart) * eio(t);
+            fpvLookAt(FX, 2.0, FRONT_Z);
+            return t >= 1;
+        });
+
+        // Phase 2 — player walks through door (≈1100 ms) ────────────────
+        phases.push((dt) => {
+            const arrived = moveToward(playerMesh, FX, FRONT_Z + 1.5, WALK_SPEED, dt);
+            fpvForward();
+            return arrived;
+        });
+
+        // Phase 2.5 — door swings closed behind player (600 ms) ─────────
+        let p2de = 0;
+        phases.push((dt) => {
+            p2de += dt;
+            const t = clamp01(p2de / 600);
+            if (fastFoodData.doorPivot)
+                fastFoodData.doorPivot.rotation.y = DOOR_OPEN * (1 - eio(t));
+            fpvForward();
+            return t >= 1;
+        });
+
+        // Phase 3 — player walks to the counter (≈850 ms) ───────────────
+        phases.push((dt) => {
+            const arrived = moveToward(playerMesh, FX, COUNTER_S_Z, WALK_SPEED, dt);
+            fpvForward();
+            return arrived;
+        });
+
+        // Phase 4 — both face each other; settle (600 ms) ───────────────
+        let p4e = 0;
+        phases.push((dt) => {
+            p4e += dt;
+            playerMesh.rotation.y = 0;
+            cshMesh.rotation.y    = Math.PI;
+            fpvLookAt(cshMesh.position.x, cshMesh.position.y + 0.55, cshMesh.position.z);
+            return p4e > 600;
+        });
+
+        // Phase 5 — cashier raises burger bag (1000 ms) ─────────────────
+        let p5e = 0;
+        phases.push((dt) => {
+            p5e += dt;
+            const t = clamp01(p5e / 1000);
+            if (t > 0.15) {
+                burger.setEnabled(true);
+                const raise = eio(clamp01((t - 0.15) / 0.85));
+                burger.position.set(
+                    cshMesh.position.x,
+                    cshMesh.position.y + 0.55 + raise * 0.30,
+                    cshMesh.position.z + 0.35
+                );
+            }
+            fpvLookAt(cshMesh.position.x, cshMesh.position.y + 0.70, cshMesh.position.z);
+            return t >= 1;
+        });
+
+        // Phase 6 — burger slides across counter (900 ms) ───────────────
+        let p6e = 0;
+        phases.push((dt) => {
+            p6e += dt;
+            const t = clamp01(p6e / 900);
+            const bx0 = cshMesh.position.x,      bz0 = cshMesh.position.z + 0.35,      by0 = cshMesh.position.y + 0.85;
+            const bx1 = playerMesh.position.x + 0.25, bz1 = playerMesh.position.z + 0.35, by1 = playerMesh.position.y + 0.55;
+            burger.position.set(bx0+(bx1-bx0)*eio(t), by0+(by1-by0)*eio(t), bz0+(bz1-bz0)*eio(t));
+            fpvLookAt(cshMesh.position.x, cshMesh.position.y + 0.60, cshMesh.position.z);
+            return t >= 1;
+        });
+
+        // Phase 7 — player reaches out and takes the burger (900 ms) ────
+        let p7e = 0;
+        phases.push((dt) => {
+            p7e += dt;
+            const t = clamp01(p7e / 900);
+            if (plyArmPivotR) plyArmPivotR.rotation.x = -eio(Math.min(t * 2, 1)) * 0.70;
+            burger.position.set(
+                playerMesh.position.x + 0.25,
+                playerMesh.position.y + 0.45 + eio(t) * 0.05,
+                playerMesh.position.z + 0.35
+            );
+            if (t > 0.85) burger.setEnabled(false);
+            fpvLookAt(cshMesh.position.x, cshMesh.position.y + 0.55, cshMesh.position.z);
+            return p7e > 900;
+        });
+
+        // Phase 8 — arm returns; hold (800 ms) ──────────────────────────
+        let p8e = 0;
+        phases.push((dt) => {
+            p8e += dt;
+            const t = clamp01(p8e / 600);
+            if (plyArmPivotR) plyArmPivotR.rotation.x = -0.70 * (1 - eio(t));
+            fpvLookAt(cshMesh.position.x, cshMesh.position.y + 0.55, cshMesh.position.z);
+            return p8e > 800;
+        });
+
+        // Phase 9 — door opens; player walks out (≈1700 ms) ─────────────
+        let p9e = 0;
+        phases.push((dt) => {
+            p9e += dt;
+            eyeHeight = EYE_STAND;
+            if (fastFoodData.doorPivot)
+                fastFoodData.doorPivot.rotation.y = DOOR_OPEN * eio(clamp01(p9e / 500));
+            const arrived = moveToward(playerMesh, FX, FRONT_Z - 2.5, WALK_SPEED, dt);
+            fpvForward();
+            return arrived;
+        });
+
+        // Phase 10 — door swings shut (600 ms) ───────────────────────────
+        let p10e = 0;
+        phases.push((dt) => {
+            p10e += dt;
+            const t = clamp01(p10e / 600);
+            if (fastFoodData.doorPivot)
+                fastFoodData.doorPivot.rotation.y = DOOR_OPEN * (1 - eio(t));
+            fpvForward();
+            return t >= 1;
+        });
+
+        // Phase 11 — brief pause (500 ms) ────────────────────────────────
+        let p11e = 0;
+        phases.push((dt) => { p11e += dt; return p11e > 500; });
+
+        // ── Subtitle schedule ──────────────────────────────────────────
+        // p0=1200 p1=2000 p2≈3100 p2.5=3700 p3≈4550 p4=5150
+        // p5=6150 p6=7050 p7=7950 p8=8750 p9≈10450 p10=11050 p11=11550
+        sub("You push through the door of Burger Barn...",         2200,   300);
+        sub("The smell hits you like a warm, delicious wall.",      2500,  3200);
+        sub("\"Welcome! What can I get ya?\"",                      2000,  5200);
+        sub("\"Classic combo, please.\"  You hand over $10.",       2200,  6200);
+        sub("Hot, fresh, and absolutely perfect.",                  2500,  8000);
+
+        // ── Finish ──────────────────────────────────────────────────────
+        function finish() {
+            if (_done) return;
+            _done = true;
+            timers.forEach(id => clearTimeout(id));
+            UI.showText(' ', 1);
+            document.removeEventListener('keydown', onSkipKey, true);
+            scene.onBeforeRenderObservable.remove(observer);
+            playerMesh.position.y = 1;
+            eyeHeight = EYE_STAND;
+            if (plyArmPivotR) plyArmPivotR.rotation.x = 0;
+            burger.dispose();
+            cshCap.dispose();
+            cshBrim.dispose();
+            disposeCsh();
+            // Restore permanent cashier
+            if (fastFoodData.cashierRoot) fastFoodData.cashierRoot.setEnabled(true);
+            _active = false;
+            if (onComplete) onComplete();
+        }
+        let _done = false;
+
+        function onSkipKey(e) {
+            if (e.code === 'Space' || e.code === 'Enter' || e.code === 'Escape') {
+                e.stopPropagation();
+                e.preventDefault();
+                finish();
+            }
+        }
+        document.addEventListener('keydown', onSkipKey, true);
+
+        const _safetyTimer = setTimeout(finish, 25000);
+        timers.push(_safetyTimer);
+
+        let _lastT = performance.now();
+        const observer = scene.onBeforeRenderObservable.add(() => {
+            if (_done) return;
+            const now = performance.now();
+            const dt  = now - _lastT;
+            _lastT    = now;
+            if (phase >= phases.length) { finish(); return; }
+            const done = phases[phase](dt);
+            if (done) phase++;
+        });
+    }
+
     // ── Public: query active state ─────────────────────────────────────
     function isActive() {
         return _active;
     }
 
-    return { play, isActive, playIntroCutscene, playInterviewCutscene, playPaydayCutscene, playFailCutscene };
+    return { play, isActive, playIntroCutscene, playInterviewCutscene, playPaydayCutscene, playFailCutscene, playFastFoodCutscene };
 })();

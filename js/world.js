@@ -824,59 +824,319 @@ const World = (() => {
     // ── Fast Food Restaurant ──────────────────────────────────────────
     function buildFastFood(scene, pos) {
         const w = 13, h = 6, d = 13;
+        const SX = pos.x, SZ = pos.z;
+        const FRONT_Z = SZ - d / 2;   // south face Z
 
-        const bld = BABYLON.MeshBuilder.CreateBox("fastfood", { width: w, height: h, depth: d }, scene);
-        bld.position.set(pos.x, h / 2, pos.z);
-        bld.material = mat(scene, COLOURS.fastFood);
-        bld.checkCollisions = true;
+        const wallMat  = mat(scene, COLOURS.fastFood);
+        const floorMat = mat(scene, "#f0e6cc");
+        const ceilMat  = mat(scene, "#e8dcc0");
+        const woodMat  = mat(scene, "#8B4513");
+        const metalMat = mat(scene, "#aaaaaa");
 
-        // Roof overhang in yellow
-        const roof = BABYLON.MeshBuilder.CreateBox("fastfoodRoof", { width: w + 2, height: 0.6, depth: d + 2 }, scene);
-        roof.position.set(pos.x, h + 0.3, pos.z);
+        // Door opening dimensions
+        const doorW = 2.2, doorH = 3.8;
+        const sideW = (w - doorW) / 2;
+
+        // ── Exterior walls ─────────────────────────────────────────────
+        const wallN = BABYLON.MeshBuilder.CreateBox("fastfoodWallN", { width: w, height: h, depth: 1.0 }, scene);
+        wallN.position.set(SX, h / 2, SZ + d / 2 + 0.35);
+        wallN.material = wallMat; wallN.checkCollisions = true;
+
+        const wallWall = BABYLON.MeshBuilder.CreateBox("fastfoodWallW", { width: 1.0, height: h, depth: d }, scene);
+        wallWall.position.set(SX - w / 2 - 0.35, h / 2, SZ);
+        wallWall.material = wallMat; wallWall.checkCollisions = true;
+
+        const wallE = BABYLON.MeshBuilder.CreateBox("fastfoodWallE", { width: 1.0, height: h, depth: d }, scene);
+        wallE.position.set(SX + w / 2 + 0.35, h / 2, SZ);
+        wallE.material = wallMat; wallE.checkCollisions = true;
+
+        const wallFL = BABYLON.MeshBuilder.CreateBox("fastfoodWallFL", { width: sideW, height: h, depth: 1.0 }, scene);
+        wallFL.position.set(SX - doorW / 2 - sideW / 2, h / 2, FRONT_Z - 0.35);
+        wallFL.material = wallMat; wallFL.checkCollisions = true;
+
+        const wallFR = BABYLON.MeshBuilder.CreateBox("fastfoodWallFR", { width: sideW, height: h, depth: 1.0 }, scene);
+        wallFR.position.set(SX + doorW / 2 + sideW / 2, h / 2, FRONT_Z - 0.35);
+        wallFR.material = wallMat; wallFR.checkCollisions = true;
+
+        const lintel = BABYLON.MeshBuilder.CreateBox("fastfoodLintel", { width: doorW, height: h - doorH, depth: 1.0 }, scene);
+        lintel.position.set(SX, doorH + (h - doorH) / 2, FRONT_Z - 0.35);
+        lintel.material = wallMat; lintel.checkCollisions = true;
+
+        // ── Floor & ceiling ────────────────────────────────────────────
+        const floor = BABYLON.MeshBuilder.CreateGround("fastfoodFloor", { width: w - 0.4, height: d - 0.4 }, scene);
+        floor.position.set(SX, 0.02, SZ); floor.material = floorMat;
+
+        const ceil = BABYLON.MeshBuilder.CreateBox("fastfoodCeil", { width: w - 0.3, height: 0.2, depth: d - 0.3 }, scene);
+        ceil.position.set(SX, h - 0.1, SZ); ceil.material = ceilMat;
+
+        // ── Serving counter ────────────────────────────────────────────
+        const counter = BABYLON.MeshBuilder.CreateBox("fastfoodCounter",
+            { width: w - 4, height: 1.1, depth: 1.4 }, scene);
+        counter.position.set(SX, 0.55, SZ - 2.8);
+        counter.material = woodMat; counter.checkCollisions = true;
+
+        // Invisible blocker — full interior width so the player can't slip around either end
+        const counterBlocker = BABYLON.MeshBuilder.CreateBox("fastfoodCounterBlocker",
+            { width: w - 0.8, height: 2.5, depth: 1.4 }, scene);
+        counterBlocker.position.set(SX, 1.25, SZ - 2.8);
+        counterBlocker.isVisible = false; counterBlocker.checkCollisions = true;
+
+        const counterTop = BABYLON.MeshBuilder.CreateBox("fastfoodCounterTop",
+            { width: w - 3.8, height: 0.12, depth: 1.6 }, scene);
+        counterTop.position.set(SX, 1.12, SZ - 2.8);
+        counterTop.material = mat(scene, "#a0522d");
+
+        // POS register on counter
+        const reg = BABYLON.MeshBuilder.CreateBox("ffRegister",
+            { width: 0.55, height: 0.38, depth: 0.35 }, scene);
+        reg.position.set(SX - 1.8, 1.28, SZ - 2.65);
+        reg.material = mat(scene, "#222222");
+        const regScreen = BABYLON.MeshBuilder.CreateBox("ffRegScreen",
+            { width: 0.42, height: 0.30, depth: 0.05 }, scene);
+        regScreen.position.set(SX - 1.8, 1.54, SZ - 2.5);
+        regScreen.material = mat(scene, "#2244cc");
+
+        // Heat lamp above counter
+        const heatLamp = BABYLON.MeshBuilder.CreateBox("ffHeatLamp",
+            { width: w - 4.5, height: 0.18, depth: 1.0 }, scene);
+        heatLamp.position.set(SX, 3.2, SZ - 2.8); heatLamp.material = metalMat;
+        const lampGlow = BABYLON.MeshBuilder.CreateBox("ffLampGlow",
+            { width: w - 5, height: 0.08, depth: 0.65 }, scene);
+        lampGlow.position.set(SX, 3.1, SZ - 2.8);
+        lampGlow.material = mat(scene, "#ff5500");
+        lampGlow.material.emissiveColor = new BABYLON.Color3(1, 0.35, 0);
+
+        // ── Kitchen equipment (north of counter) ───────────────────────
+        // Fryer (left / west side)
+        const fryer = BABYLON.MeshBuilder.CreateBox("ffFryer",
+            { width: 1.4, height: 1.6, depth: 1.2 }, scene);
+        fryer.position.set(SX - 3.5, 0.8, SZ + 1.6);
+        fryer.material = metalMat; fryer.checkCollisions = true;
+        const fryerTop = BABYLON.MeshBuilder.CreateBox("ffFryerTop",
+            { width: 1.2, height: 0.1, depth: 1.0 }, scene);
+        fryerTop.position.set(SX - 3.5, 1.65, SZ + 1.6);
+        fryerTop.material = mat(scene, "#333333");
+
+        // Grill (right / east side)
+        const grill = BABYLON.MeshBuilder.CreateBox("ffGrill",
+            { width: 2.0, height: 1.4, depth: 1.4 }, scene);
+        grill.position.set(SX + 3.0, 0.7, SZ + 1.6);
+        grill.material = metalMat; grill.checkCollisions = true;
+        const grillTop = BABYLON.MeshBuilder.CreateBox("ffGrillTop",
+            { width: 2.0, height: 0.12, depth: 1.4 }, scene);
+        grillTop.position.set(SX + 3.0, 1.46, SZ + 1.6);
+        grillTop.material = mat(scene, "#1a1a1a");
+
+        // Shelf unit on north/back wall
+        const shelf = BABYLON.MeshBuilder.CreateBox("ffShelf",
+            { width: w - 2, height: 2.4, depth: 0.7 }, scene);
+        shelf.position.set(SX, 1.2, SZ + 6.1);
+        shelf.material = metalMat; shelf.checkCollisions = true;
+        const shelfMid = BABYLON.MeshBuilder.CreateBox("ffShelfMid",
+            { width: w - 2.4, height: 0.08, depth: 0.75 }, scene);
+        shelfMid.position.set(SX, 1.9, SZ + 6.05);
+        shelfMid.material = mat(scene, "#888888");
+
+        // Prep table (centre back)
+        const prepTable = BABYLON.MeshBuilder.CreateBox("ffPrepTable",
+            { width: 2.5, height: 0.9, depth: 1.2 }, scene);
+        prepTable.position.set(SX, 0.45, SZ + 4.0);
+        prepTable.material = metalMat; prepTable.checkCollisions = true;
+        const prepTop = BABYLON.MeshBuilder.CreateBox("ffPrepTop",
+            { width: 2.6, height: 0.09, depth: 1.3 }, scene);
+        prepTop.position.set(SX, 0.95, SZ + 4.0);
+        prepTop.material = mat(scene, "#cccccc");
+
+        // ── Customer-area furniture (south of counter) ─────────────────
+        // Helper: round table + chairs at given X, Z
+        function diningSet(id, tx, tz) {
+            const base = BABYLON.MeshBuilder.CreateCylinder("ffTBase" + id,
+                { height: 0.82, diameter: 0.16, tessellation: 6 }, scene);
+            base.position.set(tx, 0.41, tz); base.material = woodMat;
+
+            const top = BABYLON.MeshBuilder.CreateCylinder("ffTTop" + id,
+                { height: 0.09, diameter: 1.4, tessellation: 12 }, scene);
+            top.position.set(tx, 0.86, tz); top.material = mat(scene, "#cc6622");
+
+            const seatMat = mat(scene, "#dd4400");
+            [[-0.75, 0], [0.75, 0], [0, -0.75], [0, 0.75]].forEach(([dx, dz], ci) => {
+                const seat = BABYLON.MeshBuilder.CreateCylinder("ffChair" + id + "_" + ci,
+                    { height: 0.07, diameter: 0.52, tessellation: 8 }, scene);
+                seat.position.set(tx + dx, 0.68, tz + dz); seat.material = seatMat;
+                const leg = BABYLON.MeshBuilder.CreateBox("ffChairLeg" + id + "_" + ci,
+                    { width: 0.52, height: 0.64, depth: 0.52 }, scene);
+                leg.position.set(tx + dx, 0.32, tz + dz); leg.material = mat(scene, "#882200");
+            });
+        }
+        diningSet("A", SX - 3.0, SZ - 5.1);
+        diningSet("B", SX + 3.0, SZ - 5.1);
+
+        // ── Interior menu board (north wall, facing customer) ──────────
+        const menuBoard = BABYLON.MeshBuilder.CreateBox("ffMenuBoard",
+            { width: 8.5, height: 2.0, depth: 0.15 }, scene);
+        menuBoard.position.set(SX, 4.2, SZ + 6.25);
+        menuBoard.material = mat(scene, "#aa1100");
+
+        const menuPlane = BABYLON.MeshBuilder.CreatePlane("ffMenuPlane",
+            { width: 8.2, height: 1.75 }, scene);
+        menuPlane.position.set(SX, 4.2, SZ + 6.17);
+        menuPlane.rotation.y = Math.PI;  // face south
+        menuPlane.material = new BABYLON.StandardMaterial("ffMenuMat", scene);
+        const menuTex = new BABYLON.DynamicTexture("ffMenuTex", { width: 512, height: 112 }, scene);
+        const mctx = menuTex.getContext();
+        mctx.fillStyle = "#aa1100";
+        mctx.fillRect(0, 0, 512, 112);
+        mctx.fillStyle = "#ffdd00";
+        mctx.font = "bold 34px Arial";
+        mctx.textAlign = "center";
+        mctx.fillText("** BURGER BARN MENU **", 256, 38);
+        mctx.fillStyle = "#ffffff";
+        mctx.font = "bold 22px Arial";
+        mctx.fillText("Classic Combo $10   Fries $3   Shake $4", 256, 78);
+        menuTex.update();
+        menuPlane.material.diffuseTexture = menuTex;
+        menuPlane.material.emissiveColor  = BABYLON.Color3.White();
+        menuPlane.material.backFaceCulling = true;
+
+        // ── Door ───────────────────────────────────────────────────────
+        const doorPivot = new BABYLON.TransformNode("fastfoodDoorPivot", scene);
+        doorPivot.position.set(SX - doorW / 2, 0, FRONT_Z);
+
+        const doorMesh = BABYLON.MeshBuilder.CreateBox("fastfoodDoor",
+            { width: doorW, height: doorH, depth: 0.10 }, scene);
+        doorMesh.material = mat(scene, COLOURS.door);
+        doorMesh.checkCollisions = true;
+        doorMesh.position.set(doorW / 2, doorH / 2, 0);
+        doorMesh.parent = doorPivot;
+
+        const handle = BABYLON.MeshBuilder.CreateSphere("fastfoodDoorHandle",
+            { diameter: 0.18 }, scene);
+        handle.material = mat(scene, "#c8a000");
+        handle.position.set(doorW - 0.25, doorH / 2, 0.14);
+        handle.parent = doorPivot;
+
+        const handleInner = BABYLON.MeshBuilder.CreateSphere("fastfoodDoorHandleInner",
+            { diameter: 0.18 }, scene);
+        handleInner.material = mat(scene, "#c8a000");
+        handleInner.position.set(doorW - 0.25, doorH / 2, -0.14);
+        handleInner.parent = doorPivot;
+
+        // ── Roof overhang ──────────────────────────────────────────────
+        const roof = BABYLON.MeshBuilder.CreateBox("fastfoodRoof",
+            { width: w + 2, height: 0.6, depth: d + 2 }, scene);
+        roof.position.set(SX, h + 0.3, SZ);
         roof.material = mat(scene, "#f39c12");
 
-        // Building label
-        const label = BABYLON.MeshBuilder.CreatePlane("fastfoodLabel", { width: 9, height: 2.2 }, scene);
-        label.position.set(pos.x, 4.0, pos.z - d / 2 - 0.05);
-        label.material = new BABYLON.StandardMaterial("fastfoodLabelMat", scene);
-        const labelTex = new BABYLON.DynamicTexture("fastfoodLabelTex", { width: 512, height: 128 }, scene);
-        labelTex.drawText("BURGER BARN", null, 88, "bold 72px Arial", "#ffffff", "#cc3300", true);
-        label.material.diffuseTexture = labelTex;
-        label.material.emissiveColor = new BABYLON.Color3(1, 0.4, 0.2);
-        label.material.backFaceCulling = false;
+        // ── Sign (mounted on south face of the roof overhang — always visible) ─
+        // The roof overhang south face is at FRONT_Z - 1.0 (SZ - d/2 - 1).
+        // Mounting the sign board there puts it fully above the building walls.
+        const signBoard = BABYLON.MeshBuilder.CreateBox("fastfoodSignBoard",
+            { width: 10.5, height: 2.2, depth: 0.4 }, scene);
+        signBoard.position.set(SX, h + 1.1, FRONT_Z - 1.05);
+        signBoard.material = mat(scene, "#cc3300");
 
-        // Price sign
-        const pricePlane = BABYLON.MeshBuilder.CreatePlane("fastfoodPrice", { width: 4, height: 1.1 }, scene);
-        pricePlane.position.set(pos.x, h - 0.5, pos.z - d / 2 - 0.1);
+        const signPlane = BABYLON.MeshBuilder.CreatePlane("fastfoodSignPlane",
+            { width: 10.1, height: 1.85 }, scene);
+        signPlane.position.set(SX, h + 1.1, FRONT_Z - 1.27);
+        signPlane.material = new BABYLON.StandardMaterial("ffSignMat", scene);
+        const signTex = new BABYLON.DynamicTexture("ffSignTex", { width: 1024, height: 96 }, scene);
+        const sctx = signTex.getContext();
+        sctx.fillStyle = "#cc3300";
+        sctx.fillRect(0, 0, 1024, 96);
+        sctx.fillStyle = "#ffffff";
+        sctx.font = "bold 72px Arial";
+        sctx.textAlign = "center";
+        sctx.fillText("BURGER BARN", 512, 74);
+        signTex.update();
+        signPlane.material.diffuseTexture = signTex;
+        signPlane.material.emissiveColor  = BABYLON.Color3.White();
+        signPlane.material.backFaceCulling = false;
+
+        // Price banner below sign
         const priceTex = new BABYLON.DynamicTexture("fastfoodPriceTex", { width: 256, height: 64 }, scene);
         priceTex.drawText("MEAL  $10", null, 48, "bold 40px Arial", "#ffffff", "#f39c12", true);
+        const pricePlane = BABYLON.MeshBuilder.CreatePlane("fastfoodPrice",
+            { width: 4, height: 1.0 }, scene);
+        pricePlane.position.set(SX, h - 0.5, FRONT_Z - 0.65);
         pricePlane.material = new BABYLON.StandardMaterial("fastfoodPriceMat", scene);
         pricePlane.material.diffuseTexture = priceTex;
-        pricePlane.material.emissiveColor = new BABYLON.Color3(1, 0.8, 0);
+        pricePlane.material.emissiveColor  = new BABYLON.Color3(1, 0.85, 0);
         pricePlane.material.backFaceCulling = false;
 
-        // Trigger zone (in front of door)
-        const trigger = BABYLON.MeshBuilder.CreateBox("fastfoodTrigger", { width: 6, height: 3, depth: 4 }, scene);
-        trigger.position.set(pos.x, 1.5, pos.z - d / 2 - 2);
-        trigger.isVisible = false;
-        trigger.isPickable = false;
+        // ── Permanent cashier NPC ──────────────────────────────────────
+        // Stands behind the counter, faces south toward the player.
+        const cashierRoot = new BABYLON.TransformNode("ffCashierRoot", scene);
+        cashierRoot.position.set(SX, 1, SZ - 1.8);
+        cashierRoot.rotation.y = Math.PI;   // face south
+
+        const skinMat  = mat(scene, "#d4a678");
+        const redUnif  = mat(scene, "#cc2200");
+        const pntsMat  = mat(scene, "#222233");
+        const hairMat  = mat(scene, "#5c3317");
+
+        const cshTorso = BABYLON.MeshBuilder.CreateBox("ffCshTorso",
+            { width: 0.52, height: 0.58, depth: 0.28 }, scene);
+        cshTorso.material = redUnif; cshTorso.position.y = 0.09; cshTorso.parent = cashierRoot;
+
+        const cshNeck = BABYLON.MeshBuilder.CreateCylinder("ffCshNeck",
+            { height: 0.13, diameter: 0.18, tessellation: 6 }, scene);
+        cshNeck.material = skinMat; cshNeck.position.y = 0.42; cshNeck.parent = cashierRoot;
+
+        const cshHead = BABYLON.MeshBuilder.CreateSphere("ffCshHead",
+            { diameter: 0.46, segments: 6 }, scene);
+        cshHead.material = skinMat; cshHead.position.y = 0.60; cshHead.parent = cashierRoot;
+
+        const cshHair = BABYLON.MeshBuilder.CreateSphere("ffCshHair",
+            { diameter: 0.48, segments: 5 }, scene);
+        cshHair.material = hairMat; cshHair.position.set(0, 0.68, -0.03); cshHair.parent = cashierRoot;
+
+        const cshLegL = BABYLON.MeshBuilder.CreateBox("ffCshLegL",
+            { width: 0.23, height: 0.55, depth: 0.23 }, scene);
+        cshLegL.material = pntsMat; cshLegL.position.set(-0.14, -0.465, 0); cshLegL.parent = cashierRoot;
+
+        const cshLegR = BABYLON.MeshBuilder.CreateBox("ffCshLegR",
+            { width: 0.23, height: 0.55, depth: 0.23 }, scene);
+        cshLegR.material = pntsMat; cshLegR.position.set(0.14, -0.465, 0); cshLegR.parent = cashierRoot;
+
+        const cshArmL = BABYLON.MeshBuilder.CreateCylinder("ffCshArmL",
+            { height: 0.48, diameter: 0.17, tessellation: 6 }, scene);
+        cshArmL.material = redUnif; cshArmL.rotation.z = -0.15;
+        cshArmL.position.set(-0.31, 0.12, 0); cshArmL.parent = cashierRoot;
+
+        const cshArmR = BABYLON.MeshBuilder.CreateCylinder("ffCshArmR",
+            { height: 0.48, diameter: 0.17, tessellation: 6 }, scene);
+        cshArmR.material = redUnif; cshArmR.rotation.z = 0.15;
+        cshArmR.position.set(0.31, 0.12, 0); cshArmR.parent = cashierRoot;
+
+        // Visor cap
+        const cap = BABYLON.MeshBuilder.CreateCylinder("ffCshCap",
+            { height: 0.17, diameterTop: 0.34, diameterBottom: 0.46, tessellation: 8 }, scene);
+        cap.material = mat(scene, "#991100"); cap.position.set(0, 0.85, 0.05); cap.parent = cashierRoot;
+        const brim = BABYLON.MeshBuilder.CreateBox("ffCshBrim",
+            { width: 0.54, height: 0.05, depth: 0.28 }, scene);
+        brim.material = mat(scene, "#991100"); brim.position.set(0, 0.77, 0.26); brim.parent = cashierRoot;
+
+        // ── Trigger zone (in front of door) ───────────────────────────
+        const trigger = BABYLON.MeshBuilder.CreateBox("fastfoodTrigger",
+            { width: 6, height: 3, depth: 4 }, scene);
+        trigger.position.set(SX, 1.5, FRONT_Z - 2);
+        trigger.isVisible = false; trigger.isPickable = false;
         trigger.metadata = { type: "fastfoodTrigger" };
 
-        // Minimap marker — large flat disc elevated well above the roof.
-        // Uses 0x20000000 (same layer as player/truck dots — proven to render on minimap).
-        const mmMarker = BABYLON.MeshBuilder.CreateGround("fastfoodMM", {
-            width: 22, height: 22,
-        }, scene);
-        mmMarker.position.set(pos.x, h + 8, pos.z);
+        // ── Minimap marker ─────────────────────────────────────────────
+        const mmMarker = BABYLON.MeshBuilder.CreateGround("fastfoodMM",
+            { width: 22, height: 22 }, scene);
+        mmMarker.position.set(SX, h + 8, SZ);
         const mmMat = new BABYLON.StandardMaterial("fastfoodMMMat", scene);
         mmMat.diffuseColor    = new BABYLON.Color3(1, 0.35, 0);
         mmMat.emissiveColor   = new BABYLON.Color3(1, 0.35, 0);
         mmMat.disableLighting = true;
         mmMarker.material   = mmMat;
         mmMarker.isPickable = false;
-        mmMarker.layerMask  = 0x20000000;  // minimap-only (same as player/truck dots)
+        mmMarker.layerMask  = 0x20000000;
 
-        return { type: "fastfood", bld, trigger, pos, mmMarker };
+        return { type: "fastfood", trigger, pos, mmMarker,
+                 doorPivot, doorOpenRot: -Math.PI / 2, cashierRoot };
     }
 
     // ── Depot (truck parking) ─────────────────────────────────────────
