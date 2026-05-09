@@ -123,5 +123,7 @@ const Minimap = (() => {
         _scene.activeCameras = [_mainCamera, minimapCamera];
     }
 
-    return { init, createDot, updateDot, setObjective, hide, show };
+    function getCamera() { return minimapCamera; }
+
+    return { init, createDot, updateDot, setObjective, hide, show, getCamera };
 })();
