@@ -12,6 +12,8 @@ const UI = (() => {
     let fadeTimeout = null;
     let hungerRow = null;
     let hungerFill = null;
+    let _moneyAmount = 0;
+    let _hatShopPanel = null;
 
     function init(scene) {
         advTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI", true, scene);
@@ -149,9 +151,12 @@ const UI = (() => {
 
     // ── Money HUD ─────────────────────────────────────────────────────
     function setMoney(amount) {
+        _moneyAmount = amount;
         if (!moneyText) return;
         moneyText.text = `$${amount}`;
     }
+
+    function getMoney() { return _moneyAmount; }
 
     // ── Hunger bar ────────────────────────────────────────────────────
     function setHunger(value) {
@@ -383,6 +388,167 @@ const UI = (() => {
         loadQuestion();
     }
 
+    // ── Hat shop overlay ─────────────────────────────────────────
+    // onBuy(hatType, cost)  — called when a hat is purchased
+    // onClose()             — called when the panel is dismissed
+    function showHatShop(currentHat, ownedHats, onBuy, onClose) {
+        if (!advTexture) return;
+        if (_hatShopPanel) hideHatShop();
+
+        const HATS = [
+            { type: "cap",    label: "Baseball Cap",  cost: 15, color: "#2980b9" },
+            { type: "tophat", label: "Top Hat",        cost: 25, color: "#34495e" },
+            { type: "cowboy", label: "Cowboy Hat",      cost: 20, color: "#a93226" },
+        ];
+
+        let _wornHat = currentHat;   // tracks hat currently being worn within this session
+
+        const panel = new BABYLON.GUI.Rectangle("hatShopPanel");
+        panel.background = "rgba(20,10,30,0.92)";
+        panel.thickness = 2;
+        panel.color = "#9b59b6";
+        panel.cornerRadius = 10;
+        panel.width = "360px";
+        panel.adaptHeightToChildren = true;
+        panel.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_CENTER;
+        panel.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
+        advTexture.addControl(panel);
+        _hatShopPanel = panel;
+
+        const stack = new BABYLON.GUI.StackPanel("hatShopStack");
+        stack.paddingTop = "14px";
+        stack.paddingBottom = "14px";
+        panel.addControl(stack);
+
+        const title = new BABYLON.GUI.TextBlock("hatShopTitle");
+        title.text = "HAT SHOP";
+        title.color = "#e8aaff";
+        title.fontSize = 26;
+        title.fontFamily = "Arial";
+        title.fontStyle = "bold";
+        title.height = "38px";
+        stack.addControl(title);
+
+        // Money display (refreshable)
+        const moneyLbl = new BABYLON.GUI.TextBlock("hatShopMoney");
+        moneyLbl.text = `Your money: $${_moneyAmount}`;
+        moneyLbl.color = "#00FF88";
+        moneyLbl.fontSize = 18;
+        moneyLbl.fontFamily = "Arial";
+        moneyLbl.height = "28px";
+        stack.addControl(moneyLbl);
+
+        const sep = new BABYLON.GUI.TextBlock("hatSep");
+        sep.text = "";
+        sep.height = "8px";
+        stack.addControl(sep);
+
+        function _refreshButtons() {
+            HATS.forEach(h => {
+                const b = stack.getDescendants(false, n => n.name === "hatBtn_" + h.type)[0];
+                const t = stack.getDescendants(false, n => n.name === "hatTag_" + h.type)[0];
+                const owned = ownedHats.has(h.type);
+                if (b) {
+                    b.textBlock.text = owned ? h.label : `${h.label}  ($${h.cost})`;
+                    b.background = (h.type === _wornHat) ? h.color
+                        : owned ? "#1a3a1a" : "#2a2a3a";
+                }
+                if (t) {
+                    t.text = owned ? "  ✓" : (_moneyAmount >= h.cost ? "" : "  ✗");
+                    t.color = owned ? "#44cc44" : "#cc4444";
+                }
+            });
+            moneyLbl.text = `Your money: $${_moneyAmount}`;
+        }
+
+        HATS.forEach(hat => {
+            const row = new BABYLON.GUI.StackPanel("hatRow_" + hat.type);
+            row.isVertical = false;
+            row.height = "46px";
+            row.paddingTop = "4px";
+            stack.addControl(row);
+
+            const owned = ownedHats.has(hat.type);
+            const btn = BABYLON.GUI.Button.CreateSimpleButton("hatBtn_" + hat.type,
+                owned ? hat.label : `${hat.label}  ($${hat.cost})`);
+            btn.width = "270px";
+            btn.height = "38px";
+            btn.color = "white";
+            btn.background = _wornHat === hat.type ? hat.color
+                : owned ? "#1a3a1a" : "#2a2a3a";
+            btn.fontSize = 16;
+            btn.thickness = 1;
+            btn.cornerRadius = 6;
+            btn.onPointerClickObservable.add(() => {
+                const isOwned = ownedHats.has(hat.type);
+                const cost = isOwned ? 0 : hat.cost;
+                if (!isOwned && _moneyAmount < hat.cost) return;
+                onBuy(hat.type, cost);
+                _wornHat = hat.type;
+                _refreshButtons();
+            });
+            row.addControl(btn);
+
+            // Owned / affordability indicator
+            const tag = new BABYLON.GUI.TextBlock("hatTag_" + hat.type);
+            tag.text = owned ? "  ✓" : (_moneyAmount >= hat.cost ? "" : "  ✗");
+            tag.color = owned ? "#44cc44" : "#cc4444";
+            tag.fontSize = 18;
+            tag.width = "30px";
+            row.addControl(tag);
+        });
+
+        const sep2 = new BABYLON.GUI.TextBlock("hatSep2");
+        sep2.text = "";
+        sep2.height = "8px";
+        stack.addControl(sep2);
+
+        const removeBtn = BABYLON.GUI.Button.CreateSimpleButton("hatRemoveBtn", "Remove Hat");
+        removeBtn.width = "270px";
+        removeBtn.height = "34px";
+        removeBtn.color = "#aaaaaa";
+        removeBtn.background = "#1a1a1a";
+        removeBtn.fontSize = 14;
+        removeBtn.thickness = 1;
+        removeBtn.cornerRadius = 6;
+        removeBtn.onPointerClickObservable.add(() => {
+            onBuy(null, 0);
+            _wornHat = null;
+            moneyLbl.text = `Your money: $${_moneyAmount}`;
+            HATS.forEach(h => {
+                const b = stack.getDescendants(false, n => n.name === "hatBtn_" + h.type)[0];
+                if (b) b.background = ownedHats.has(h.type) ? "#1a3a1a" : "#2a2a3a";
+            });
+        });
+        stack.addControl(removeBtn);
+
+        const sep3 = new BABYLON.GUI.TextBlock("hatSep3");
+        sep3.text = "";
+        sep3.height = "10px";
+        stack.addControl(sep3);
+
+        const closeBtn = BABYLON.GUI.Button.CreateSimpleButton("hatCloseBtn", "Close  [E]");
+        closeBtn.width = "270px";
+        closeBtn.height = "36px";
+        closeBtn.color = "white";
+        closeBtn.background = "#333";
+        closeBtn.fontSize = 15;
+        closeBtn.thickness = 1;
+        closeBtn.cornerRadius = 6;
+        closeBtn.onPointerClickObservable.add(() => { hideHatShop(); onClose(); });
+        stack.addControl(closeBtn);
+    }
+
+    function hideHatShop() {
+        if (_hatShopPanel) {
+            advTexture.removeControl(_hatShopPanel);
+            _hatShopPanel.dispose();
+            _hatShopPanel = null;
+        }
+    }
+
+    function isHatShopOpen() { return !!_hatShopPanel; }
+
     return {
         init,
         getAdvTexture: () => advTexture,
@@ -395,8 +561,12 @@ const UI = (() => {
         showEndScreen,
         showInterviewPanel,
         setMoney,
+        getMoney,
         setHunger,
         showHungerBar,
         hideHungerBar,
+        showHatShop,
+        hideHatShop,
+        isHatShopOpen,
     };
 })();

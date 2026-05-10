@@ -175,12 +175,16 @@
         const depotData    = World.getSpecialBuilding("depot");
         const hotelData    = World.getSpecialBuilding("hotel");
         const fastFoodData = World.getSpecialBuilding("fastfood");
+        const hatStoreData = World.getSpecialBuilding("hatstore");
 
         // ── State flags ─────────────────────────────────────────────
         let interactHintActive = "";
         let paydayReady = false;
         let policeAlerted = false;
-        let interviewScore = 0;        let hunger = 100;        // ── Game state machine ───────────────────────────────────────
+        let interviewScore = 0;        let hunger = 100;
+        const _ownedHats = new Set();   // hats purchased this playthrough (unlock once, wear free)
+        let _gameOverCause = 'interview';   // 'interview' | 'broke'
+        // ── Game state machine ───────────────────────────────────────
         GameState.on((newState, prev) => {
             switch (newState) {
 
@@ -261,10 +265,17 @@
 
                 case GameState.STATES.GAME_OVER:
                     UI.showMission("");
-                    Cutscene.playFailCutscene(scene, playerMesh, mainCamera, storeData, _benchPos, () => {
-                        Player.setEnabled(false);
-                        UI.showEndScreen(false, () => location.reload());
-                    });
+                    if (_gameOverCause === 'broke') {
+                        Cutscene.playBrokeCutscene(scene, playerMesh, mainCamera, _benchPos, () => {
+                            Player.setEnabled(false);
+                            UI.showEndScreen(false, () => location.reload());
+                        });
+                    } else {
+                        Cutscene.playFailCutscene(scene, playerMesh, mainCamera, storeData, _benchPos, () => {
+                            Player.setEnabled(false);
+                            UI.showEndScreen(false, () => location.reload());
+                        });
+                    }
                     break;
 
                 case GameState.STATES.JAILED:
@@ -279,9 +290,9 @@
         });
 
         // ── Intro cutscene (in-engine) ────────────────────────────────────
-        // Bench is 5 units north of spawn (bench seat top is at y≈0.75).
-        const _spawnPos = World.getPlayerSpawnPos();
-        const _benchPos = new BABYLON.Vector3(_spawnPos.x, 0.75, _spawnPos.z - 5);
+        // Park bench is always at grid (col 0, row 0) = (-90, 0, -90).
+        // Hardcoded so it stays correct regardless of getPlayerSpawnPos().
+        const _benchPos = new BABYLON.Vector3(-90, 0.75, -90);
         Cutscene.playIntroCutscene(scene, playerMesh, GameCamera.getCamera(), _benchPos, () => {
             Player.teleport(World.getPlayerSpawnPos());
             GameState.set(GameState.STATES.WALK_TO_STORE);
@@ -527,6 +538,7 @@
                 Player.setFPV(true);
                 // Hide player body so it doesn't clip into view
                 _playerChildMeshes.forEach(m => { m.isVisible = false; });
+                Player.setHatVisible(false);
                 const _cam  = GameCamera.getCamera();
                 const _eyeY = playerMesh.position.y + 0.64;
                 const _yaw  = playerMesh.rotation.y;
@@ -542,6 +554,7 @@
                 Player.setFPV(false);
                 // Restore player body visibility when outside store
                 _playerChildMeshes.forEach(m => { m.isVisible = true; });
+                Player.setHatVisible(true);
                 // Don't force-release pointer lock outside store — keep it locked globally
                 _fpvPitch = 0;
                 GameCamera.update();
@@ -693,29 +706,82 @@
             if (gs === S.FAST_FOOD && fastFoodData) {
                 if (nearTrigger(playerPos, fastFoodData.trigger, 10)) {
                     if (interactHintActive !== "fastfood") {
-                        UI.showInteractHint("Press E to buy a meal ($10)");
+                        UI.showInteractHint(UI.getMoney() >= 10 ? "Press E to buy a meal ($10)" : "Can't afford a meal! ($10)");
                         interactHintActive = "fastfood";
                         Input.flushPress("KeyE"); // discard any pre-buffered presses
                     }
                     if (Input.consumePress("KeyE")) {
-                        UI.hideInteractHint();
-                        // Keep interactHintActive = "fastfood" so the hint doesn't
-                        // re-appear on the next frame while the cutscene is playing.
-                        Cutscene.playFastFoodCutscene(
-                            scene, playerMesh, GameCamera.getCamera(),
-                            fastFoodData,
-                            () => {
-                                hunger = 100;
-                                UI.setHunger(hunger);
-                                UI.setMoney(90);
-                                GameState.set(S.HOTEL);
-                            }
-                        );
+                        if (UI.getMoney() < 10) {
+                            // Can't afford food — game over
+                            UI.hideInteractHint();
+                            interactHintActive = "";
+                            Player.setEnabled(false);
+                            _gameOverCause = 'broke';
+                            GameState.set(S.GAME_OVER);
+                        } else {
+                            UI.hideInteractHint();
+                            Cutscene.playFastFoodCutscene(
+                                scene, playerMesh, GameCamera.getCamera(),
+                                fastFoodData,
+                                () => {
+                                    hunger = 100;
+                                    UI.setHunger(hunger);
+                                    UI.setMoney(UI.getMoney() - 10);
+                                    GameState.set(S.HOTEL);
+                                }
+                            );
+                        }
                     }
                 } else {
                     if (interactHintActive === "fastfood") {
                         UI.hideInteractHint();
                         interactHintActive = "";
+                    }
+                }
+            }
+
+            // Hat Shop — available whenever the player has money and free movement
+            const _hatShopStates = gs === S.PAYDAY || gs === S.FAST_FOOD || gs === S.HOTEL;
+            if (_hatShopStates && hatStoreData) {
+                if (UI.isHatShopOpen()) {
+                    // Shop is open — close on E press
+                    if (Input.consumePress("KeyE")) {
+                        UI.hideHatShop();
+                        Player.setEnabled(true);
+                        lockPointer();
+                        interactHintActive = "";
+                    }
+                } else {
+                    // Reset hint active if shop was closed via button
+                    if (interactHintActive === "hatshop_open") interactHintActive = "";
+
+                    if (nearTrigger(playerPos, hatStoreData.trigger, 10)) {
+                        if (interactHintActive !== "hatshop") {
+                            UI.showInteractHint("Press E to browse hats");
+                            interactHintActive = "hatshop";
+                            Input.flushPress("KeyE");
+                        }
+                        if (Input.consumePress("KeyE")) {
+                            UI.hideInteractHint();
+                            interactHintActive = "hatshop_open";
+                            Player.setEnabled(false);
+                            releasePointerLock();
+                            UI.showHatShop(Player.getCurrentHat(), _ownedHats, (hatType, cost) => {
+                                if (cost > 0 && UI.getMoney() < cost) return;
+                                if (cost > 0) _ownedHats.add(hatType);
+                                UI.setMoney(UI.getMoney() - cost);
+                                Player.wearHat(hatType);
+                            }, () => {
+                                Player.setEnabled(true);
+                                lockPointer();
+                                interactHintActive = "";
+                            });
+                        }
+                    } else {
+                        if (interactHintActive === "hatshop") {
+                            UI.hideInteractHint();
+                            interactHintActive = "";
+                        }
                     }
                 }
             }
@@ -728,13 +794,25 @@
                         interactHintActive = "hotel";
                         Input.flushPress("KeyE"); // discard any pre-buffered presses
                     } else if (Input.consumePress("KeyE")) {
-                        Player.setEnabled(false);
-                        UI.hideInteractHint();
-                        interactHintActive = "";
-                        Cutscene.play('hotel', () => {
-                            UI.setMoney(30);
-                            UI.showEndScreen(true, () => location.reload());
-                        });
+                        const HOTEL_COST = 60;
+                        if (UI.getMoney() < HOTEL_COST) {
+                            // Can't afford hotel — game over
+                            UI.hideInteractHint();
+                            interactHintActive = "";
+                            UI.hideInteractHint();
+                            interactHintActive = "";
+                            Player.setEnabled(false);
+                            _gameOverCause = 'broke';
+                            GameState.set(S.GAME_OVER);
+                        } else {
+                            Player.setEnabled(false);
+                            UI.hideInteractHint();
+                            interactHintActive = "";
+                            Cutscene.play('hotel', () => {
+                                UI.setMoney(UI.getMoney() - HOTEL_COST);
+                                UI.showEndScreen(true, () => location.reload());
+                            });
+                        }
                     }
                 } else {
                     if (interactHintActive === "hotel") {

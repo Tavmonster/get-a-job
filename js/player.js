@@ -14,6 +14,11 @@ const Player = (() => {
     let legPivotL = null, legPivotR = null;
     let armPivotL = null, armPivotR = null;
 
+    // Hat state
+    let _headMesh = null;
+    let _hatRoot  = null;
+    let _currentHat = null;
+
     function init(babylonScene) {
         scene = babylonScene;
 
@@ -139,6 +144,8 @@ const Player = (() => {
         hair.scaling.y = 0.5;
         hair.parent = body;
 
+        _headMesh = head;
+
         mesh = body;
         mesh.ellipsoid = new BABYLON.Vector3(0.4, 0.85, 0.4);
         mesh.ellipsoidOffset = new BABYLON.Vector3(0, 0.85, 0);
@@ -251,5 +258,81 @@ const Player = (() => {
         if (mesh) mesh.position.copyFrom(pos);
     }
 
-    return { init, update, setEnabled, setFPV, getMesh, getPosition, teleport, applyKnockback };
+    // ── Hat system ────────────────────────────────────────────────────
+    function wearHat(type) {
+        // Remove existing hat
+        if (_hatRoot) {
+            _hatRoot.getChildMeshes(true).forEach(m => m.dispose());
+            _hatRoot.dispose();
+            _hatRoot = null;
+        }
+        _currentHat = type;
+        if (!type || !_headMesh) return;
+
+        const s = scene;
+        function hm(hex) {
+            const mat = new BABYLON.StandardMaterial("pHatMat_" + Math.random(), s);
+            mat.diffuseColor = BABYLON.Color3.FromHexString(hex);
+            return mat;
+        }
+
+        const root = new BABYLON.TransformNode("playerHatRoot", s);
+        root.parent = _headMesh;
+        root.position.set(0, type === "cap" ? 0.12 : 0.20, 0);  // sit on top of head (head radius ≈ 0.25)
+
+        if (type === "cap") {
+            // Baseball cap: low crown + forward brim
+            const crown = BABYLON.MeshBuilder.CreateCylinder("playerHatCrown",
+                { height: 0.18, diameterTop: 0.38, diameterBottom: 0.48, tessellation: 8 }, s);
+            crown.material = hm("#3498db");
+            crown.position.set(0, 0.09, 0);
+            crown.parent = root;
+            const brim = BABYLON.MeshBuilder.CreateBox("playerHatBrim",
+                { width: 0.65, height: 0.04, depth: 0.28 }, s);
+            brim.material = hm("#2980b9");
+            brim.position.set(0, 0.01, 0.24);
+            brim.parent = root;
+        } else if (type === "tophat") {
+            // Top hat: tall crown + wide flat brim + band
+            const crown = BABYLON.MeshBuilder.CreateCylinder("playerHatCrown",
+                { height: 0.40, diameter: 0.40, tessellation: 8 }, s);
+            crown.material = hm("#2c3e50");
+            crown.position.set(0, 0.20, 0);
+            crown.parent = root;
+            const brim = BABYLON.MeshBuilder.CreateCylinder("playerHatBrim",
+                { height: 0.05, diameter: 0.78, tessellation: 12 }, s);
+            brim.material = hm("#34495e");
+            brim.position.set(0, 0.01, 0);
+            brim.parent = root;
+            const band = BABYLON.MeshBuilder.CreateCylinder("playerHatBand",
+                { height: 0.06, diameter: 0.42, tessellation: 8 }, s);
+            band.material = hm("#c0392b");
+            band.position.set(0, 0.06, 0);
+            band.parent = root;
+        } else if (type === "cowboy") {
+            // Cowboy hat: wide brim + tapered crown
+            const crown = BABYLON.MeshBuilder.CreateCylinder("playerHatCrown",
+                { height: 0.26, diameterTop: 0.30, diameterBottom: 0.44, tessellation: 8 }, s);
+            crown.material = hm("#c0392b");
+            crown.position.set(0, 0.13, 0);
+            crown.parent = root;
+            const brim = BABYLON.MeshBuilder.CreateCylinder("playerHatBrim",
+                { height: 0.05, diameter: 0.88, tessellation: 12 }, s);
+            brim.material = hm("#a93226");
+            brim.position.set(0, 0.01, 0);
+            brim.parent = root;
+        }
+
+        _hatRoot = root;
+    }
+
+    function setHatVisible(val) {
+        if (!_hatRoot) return;
+        _hatRoot.getChildMeshes(true).forEach(m => { m.isVisible = val; });
+    }
+
+    function getCurrentHat() { return _currentHat; }
+
+    return { init, update, setEnabled, setFPV, getMesh, getPosition, teleport, applyKnockback,
+             wearHat, setHatVisible, getCurrentHat };
 })();

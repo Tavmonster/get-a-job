@@ -55,6 +55,7 @@ const World = (() => {
     const STORE_POS     = { col: 5, row: 1 };
     const HOTEL_POS     = { col: 5, row: 5 };
     const FAST_FOOD_POS = { col: 3, row: 5 };
+    const HAT_STORE_POS = { col: 1, row: 3 };
     const DEPOT_POS         = { col: 6, row: 1 };
     const DEPOT_FORECOURT_POS = { col: DEPOT_POS.col, row: DEPOT_POS.row - 1 };
 
@@ -133,6 +134,7 @@ const World = (() => {
                 const isStore       = col === STORE_POS.col && row === STORE_POS.row;
                 const isHotel       = col === HOTEL_POS.col && row === HOTEL_POS.row;
                 const isFastFood    = col === FAST_FOOD_POS.col && row === FAST_FOOD_POS.row;
+                const isHatStore    = col === HAT_STORE_POS.col && row === HAT_STORE_POS.row;
                 const isDepot       = col === DEPOT_POS.col && row === DEPOT_POS.row;
                 const isForecourt   = col === DEPOT_FORECOURT_POS.col && row === DEPOT_FORECOURT_POS.row;
                 const isDel         = isDeliveryCell(col, row);
@@ -160,6 +162,11 @@ const World = (() => {
 
                 if (isFastFood) {
                     specialBuildings[key] = buildFastFood(scene, pos);
+                    continue;
+                }
+
+                if (isHatStore) {
+                    specialBuildings[key] = buildHatStore(scene, pos);
                     continue;
                 }
 
@@ -244,7 +251,7 @@ const World = (() => {
         // CPU significantly for large static scenes.
         // Exclusions: anything that moves or has a moving parent.
         const SKIP_PREFIXES = [
-            "dot_", "npcCar", "truck", "npc_", "objMarker", "fastfoodMM",
+            "dot_", "npcCar", "truck", "npc_", "objMarker", "fastfoodMM", "hatStoreMM",
             // player parts
             "playerBody", "legL", "legR", "shoeL", "shoeR", "torso", "shirt",
             "tie", "armL", "armR", "handL", "handR", "head", "hair", "neck",
@@ -791,6 +798,130 @@ const World = (() => {
 
         return { type: "store", bld: wallN, trigger, pos, doorPivot,
                  doorOpenRot: -Math.PI / 2 };
+    }
+
+    // ── Hat Shop ─────────────────────────────────────────────────────
+    function buildHatStore(scene, pos) {
+        const w = 11, h = 6, d = 11;
+        const SX = pos.x, SZ = pos.z;
+        const FRONT_Z = SZ - d / 2;
+
+        const wallMat  = mat(scene, "#9b59b6");
+        const floorMat = mat(scene, "#f0e8f8");
+        const ceilMat  = mat(scene, "#e8d8f0");
+
+        const doorW = 2.0, doorH = 3.6;
+        const sideW = (w - doorW) / 2;
+
+        // ── Exterior walls ─────────────────────────────────────────────
+        const wallN = BABYLON.MeshBuilder.CreateBox("hatWallN", { width: w, height: h, depth: 1.0 }, scene);
+        wallN.position.set(SX, h / 2, SZ + d / 2 + 0.35);
+        wallN.material = wallMat; wallN.checkCollisions = true;
+
+        const wallW = BABYLON.MeshBuilder.CreateBox("hatWallW", { width: 1.0, height: h, depth: d }, scene);
+        wallW.position.set(SX - w / 2 - 0.35, h / 2, SZ);
+        wallW.material = wallMat; wallW.checkCollisions = true;
+
+        const wallE = BABYLON.MeshBuilder.CreateBox("hatWallE", { width: 1.0, height: h, depth: d }, scene);
+        wallE.position.set(SX + w / 2 + 0.35, h / 2, SZ);
+        wallE.material = wallMat; wallE.checkCollisions = true;
+
+        const wallFL = BABYLON.MeshBuilder.CreateBox("hatWallFL", { width: sideW, height: h, depth: 1.0 }, scene);
+        wallFL.position.set(SX - doorW / 2 - sideW / 2, h / 2, FRONT_Z - 0.35);
+        wallFL.material = wallMat; wallFL.checkCollisions = true;
+
+        const wallFR = BABYLON.MeshBuilder.CreateBox("hatWallFR", { width: sideW, height: h, depth: 1.0 }, scene);
+        wallFR.position.set(SX + doorW / 2 + sideW / 2, h / 2, FRONT_Z - 0.35);
+        wallFR.material = wallMat; wallFR.checkCollisions = true;
+
+        const lintel = BABYLON.MeshBuilder.CreateBox("hatLintel", { width: doorW, height: h - doorH, depth: 1.0 }, scene);
+        lintel.position.set(SX, doorH + (h - doorH) / 2, FRONT_Z - 0.35);
+        lintel.material = wallMat; lintel.checkCollisions = true;
+
+        // ── Floor & ceiling ────────────────────────────────────────────
+        const floor = BABYLON.MeshBuilder.CreateGround("hatFloor", { width: w - 0.4, height: d - 0.4 }, scene);
+        floor.position.set(SX, 0.02, SZ); floor.material = floorMat;
+
+        const ceil = BABYLON.MeshBuilder.CreateBox("hatCeil", { width: w - 0.3, height: 0.2, depth: d - 0.3 }, scene);
+        ceil.position.set(SX, h - 0.1, SZ); ceil.material = ceilMat;
+
+        // ── Roof ───────────────────────────────────────────────────────
+        const roof = BABYLON.MeshBuilder.CreateBox("hatRoof", { width: w + 0.6, height: 0.5, depth: d + 0.6 }, scene);
+        roof.position.set(SX, h + 0.25, SZ); roof.material = mat(scene, COLOURS.roof);
+
+        // ── Service counter ────────────────────────────────────────────
+        const counter = BABYLON.MeshBuilder.CreateBox("hatCounter", { width: w - 5, height: 1.1, depth: 1.2 }, scene);
+        counter.position.set(SX, 0.55, SZ + 2.0);
+        counter.material = mat(scene, "#7d3c98"); counter.checkCollisions = true;
+
+        const counterBlocker = BABYLON.MeshBuilder.CreateBox("hatCounterBlocker", { width: w - 5, height: 2.5, depth: 1.2 }, scene);
+        counterBlocker.position.set(SX, 1.25, SZ + 2.0);
+        counterBlocker.isVisible = false; counterBlocker.checkCollisions = true;
+
+        // ── Hat display stands (3 pedestal + decorative hat per stand) ─
+        const standMat = mat(scene, "#b0a090");
+        const dispColors = ["#3498db", "#2c3e50", "#c0392b"];
+        [-3.0, 0, 3.0].forEach((ox, i) => {
+            const stand = BABYLON.MeshBuilder.CreateCylinder("hatStand_" + i, { height: 0.9, diameter: 0.4 }, scene);
+            stand.position.set(SX + ox, 0.45, SZ - 1.5);
+            stand.material = standMat;
+
+            const crown = BABYLON.MeshBuilder.CreateCylinder("hatDispCrown_" + i, { height: 0.28, diameter: 0.50, tessellation: 8 }, scene);
+            crown.position.set(SX + ox, 1.04, SZ - 1.5);
+            crown.material = mat(scene, dispColors[i]);
+
+            const brim = BABYLON.MeshBuilder.CreateCylinder("hatDispBrim_" + i, { height: 0.05, diameter: 0.85, tessellation: 12 }, scene);
+            brim.position.set(SX + ox, 0.92, SZ - 1.5);
+            brim.material = mat(scene, dispColors[i]);
+        });
+
+        // ── Door (pivots from left edge, swings inward = +Z) ──────────
+        const doorPivot = new BABYLON.TransformNode("hatDoorPivot", scene);
+        doorPivot.position.set(SX - doorW / 2, 0, FRONT_Z);
+
+        const doorMesh = BABYLON.MeshBuilder.CreateBox("hatDoor",
+            { width: doorW, height: doorH, depth: 0.1 }, scene);
+        doorMesh.material = mat(scene, COLOURS.door);
+        doorMesh.checkCollisions = true;
+        doorMesh.position.set(doorW / 2, doorH / 2, 0);
+        doorMesh.parent = doorPivot;
+
+        const handle = BABYLON.MeshBuilder.CreateSphere("hatDoorHandle", { diameter: 0.18 }, scene);
+        handle.material = mat(scene, "#c8a000");
+        handle.position.set(doorW - 0.25, doorH / 2, 0.14);
+        handle.parent = doorPivot;
+
+        // ── Shop sign ─────────────────────────────────────────────────
+        const sign = BABYLON.MeshBuilder.CreatePlane("hatShopSign", { width: 8, height: 2.0 }, scene);
+        sign.position.set(SX, 4.5, FRONT_Z - 0.9);
+        sign.material = new BABYLON.StandardMaterial("hatSignMat", scene);
+        const signTex = new BABYLON.DynamicTexture("hatSignTex", { width: 512, height: 128 }, scene);
+        signTex.drawText("HAT SHOP", null, 96, "bold 80px Arial", "#ffffff", "#9b59b6", true);
+        sign.material.diffuseTexture = signTex;
+        sign.material.emissiveColor = new BABYLON.Color3(0.8, 0.5, 1.0);
+        sign.material.backFaceCulling = false;
+
+        // ── Trigger zone (in front of door) ───────────────────────────
+        const trigger = BABYLON.MeshBuilder.CreateBox("hatTrigger",
+            { width: 6, height: 3, depth: 4 }, scene);
+        trigger.position.set(SX, 1.5, FRONT_Z - 2);
+        trigger.isVisible  = false;
+        trigger.isPickable = false;
+        trigger.metadata   = { type: "hatTrigger" };
+
+        // ── Minimap marker (purple square, minimap camera only) ────────
+        const mmMarker = BABYLON.MeshBuilder.CreateGround("hatStoreMM",
+            { width: 18, height: 18 }, scene);
+        mmMarker.position.set(SX, h + 8, SZ);
+        const mmMat = new BABYLON.StandardMaterial("hatStoreMMmat", scene);
+        mmMat.diffuseColor    = new BABYLON.Color3(0.61, 0.35, 0.71);
+        mmMat.emissiveColor   = new BABYLON.Color3(0.61, 0.35, 0.71);
+        mmMat.disableLighting = true;
+        mmMarker.material   = mmMat;
+        mmMarker.isPickable = false;
+        mmMarker.layerMask  = 0x20000000;
+
+        return { type: "hatstore", trigger, pos, mmMarker, doorPivot, doorOpenRot: -Math.PI / 2 };
     }
 
     // ── Hotel ────────────────────────────────────────────────────────
@@ -1365,8 +1496,9 @@ const World = (() => {
     }
 
     function getPlayerSpawnPos() {
-        const p = gridPos(0, 0);
-        return new BABYLON.Vector3(p.x, 1, p.z + 5);
+        // Spawn in front of the hat store so it’s immediately visible
+        const p = gridPos(HAT_STORE_POS.col, HAT_STORE_POS.row);
+        return new BABYLON.Vector3(p.x, 1, p.z - 11);
     }
 
     function getTruckSpawnPos() {

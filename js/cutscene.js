@@ -97,6 +97,12 @@ const Cutscene = (() => {
             { speaker: "Narrator", text: "\"We need someone reliable.\"\n\nHis words drift through your mind." },
             { speaker: "Narrator", text: "Maybe next time you'll be better prepared." },
         ],
+
+        broke: [
+            { speaker: "Narrator", text: "Your wallet is empty.\n\nYou count the coins in your pocket for the third time, hoping the math changes." },
+            { speaker: "Narrator", text: "It doesn't." },
+            { speaker: "Narrator", text: "Without food, without shelter, the city swallows you whole.\n\nGame over." },
+        ],
     };
 
     // ── State ──────────────────────────────────────────────────────────
@@ -1639,10 +1645,199 @@ const Cutscene = (() => {
         });
     }
 
+    // ── In-engine broke cutscene ──────────────────────────────────────
+    // Player runs out of money. They slump to the ground wherever they are;
+    // camera pulls back wide. No teleport — happens in place.
+    function playBrokeCutscene(scene, playerMesh, cam, benchPos, onComplete) {
+        _active = true;
+        document.exitPointerLock?.();
+
+        const plyLegPivotL = scene.getNodeByName("legPivotL");
+        const plyLegPivotR = scene.getNodeByName("legPivotR");
+        const plyArmPivotL = scene.getNodeByName("armPivotL");
+        const plyArmPivotR = scene.getNodeByName("armPivotR");
+
+        function resetLimbs() {
+            if (plyLegPivotL) plyLegPivotL.rotation.x = 0;
+            if (plyLegPivotR) plyLegPivotR.rotation.x = 0;
+            if (plyArmPivotL) plyArmPivotL.rotation.x = 0;
+            if (plyArmPivotR) plyArmPivotR.rotation.x = 0;
+        }
+
+        function eio(t) { return t < 0.5 ? 2*t*t : -1+(4-2*t)*t; }
+        function clamp01(t) { return Math.max(0, Math.min(1, t)); }
+
+        const timers = [];
+        function sub(text, dur, delay) { timers.push(setTimeout(() => UI.showText(text, dur), delay)); }
+
+        // Re-enable player mesh (may have been disabled before triggering game over)
+        playerMesh.setEnabled(true);
+        playerMesh.getChildMeshes().forEach(m => { m.isVisible = true; });
+        playerMesh.rotation.z = 0;
+        resetLimbs();
+        const PX = playerMesh.position.x;
+        const PZ = playerMesh.position.z;
+
+        // Camera shots — bench
+        const BX = benchPos.x;
+        const BZ = benchPos.z;
+        const LIE_Y = benchPos.y + 0.3;
+        const BENCH_POS = new BABYLON.Vector3(BX + 7, 1.2, BZ - 3);
+        const BENCH_TGT = new BABYLON.Vector3(BX,     0.9, BZ);
+        const BENCH_WIDE_POS = new BABYLON.Vector3(BX + 3, 5.5, BZ - 9);
+        const BENCH_WIDE_TGT = new BABYLON.Vector3(BX,     0.7, BZ);
+
+        // Camera: side angle that follows player as they walk away
+        function sideCamera() {
+            cam.position.set(playerMesh.position.x + 7, 2.2, playerMesh.position.z - 2);
+            cam.setTarget(new BABYLON.Vector3(playerMesh.position.x, 1.4, playerMesh.position.z));
+        }
+
+        function moveToward(tx, tz, speed, dt) {
+            const dx = tx - playerMesh.position.x;
+            const dz = tz - playerMesh.position.z;
+            const dist = Math.sqrt(dx*dx + dz*dz);
+            const step = speed * dt;
+            if (dist <= step) { playerMesh.position.x = tx; playerMesh.position.z = tz; return true; }
+            playerMesh.position.x += (dx / dist) * step;
+            playerMesh.position.z += (dz / dist) * step;
+            playerMesh.rotation.y = Math.atan2(dx, dz);
+            return false;
+        }
+
+        // Walk target: southward ~10 units, staying in the road between buildings
+        const WALK_TGT_Z = PZ - 10;
+        let walkCycle = 0;
+
+        let phase = 0;
+        const phases = [];
+
+        // Phase 0 — player pauses, camera gets side angle (600 ms) ────
+        let p0e = 0;
+        phases.push((dt) => {
+            p0e += dt;
+            playerMesh.rotation.y = Math.PI;  // face south (away)
+            playerMesh.rotation.z = 0;
+            sideCamera();
+            return p0e > 600;
+        });
+
+        // Phase 1 — player walks sadly away (≈3600 ms) ─────────────────
+        const WALK_SPEED = 0.0024;
+        phases.push((dt) => {
+            walkCycle += dt * 0.004;
+            const swing = Math.sin(walkCycle) * 0.35;
+            if (plyLegPivotL) plyLegPivotL.rotation.x =  swing;
+            if (plyLegPivotR) plyLegPivotR.rotation.x = -swing;
+            if (plyArmPivotL) plyArmPivotL.rotation.x = -swing * 0.45;
+            if (plyArmPivotR) plyArmPivotR.rotation.x =  swing * 0.45;
+            const arrived = moveToward(PX, WALK_TGT_Z, WALK_SPEED, dt);
+            sideCamera();
+            return arrived;
+        });
+
+        // Phase 2 — player stops, hold shot (700 ms) ───────────────────
+        let p2e = 0;
+        phases.push((dt) => {
+            p2e += dt;
+            resetLimbs();
+            sideCamera();
+            return p2e > 700;
+        });
+
+        // Phase 3 — hard cut to bench, player already lying (1 frame) ─
+        let p3done = false;
+        phases.push((_dt) => {
+            if (!p3done) {
+                p3done = true;
+                playerMesh.position.set(BX, LIE_Y, BZ);
+                playerMesh.rotation.y = 0;
+                playerMesh.rotation.z = 1.3;
+                cam.position.copyFrom(BENCH_POS);
+                cam.setTarget(BENCH_TGT);
+            }
+            return true;
+        });
+
+        // Phase 4 — hold bench close shot (1200 ms) ───────────────────
+        let p4e = 0;
+        phases.push((dt) => {
+            p4e += dt;
+            cam.position.copyFrom(BENCH_POS);
+            cam.setTarget(BENCH_TGT);
+            return p4e > 1200;
+        });
+
+        // Phase 5 — pull back to park wide (1500 ms) ──────────────────
+        let p5e = 0;
+        phases.push((dt) => {
+            p5e += dt;
+            const t = clamp01(p5e / 1500);
+            const s = eio(t);
+            cam.position.set(
+                BENCH_POS.x + (BENCH_WIDE_POS.x - BENCH_POS.x) * s,
+                BENCH_POS.y + (BENCH_WIDE_POS.y - BENCH_POS.y) * s,
+                BENCH_POS.z + (BENCH_WIDE_POS.z - BENCH_POS.z) * s
+            );
+            cam.setTarget(new BABYLON.Vector3(
+                BENCH_TGT.x + (BENCH_WIDE_TGT.x - BENCH_TGT.x) * s,
+                BENCH_TGT.y + (BENCH_WIDE_TGT.y - BENCH_TGT.y) * s,
+                BENCH_TGT.z + (BENCH_WIDE_TGT.z - BENCH_TGT.z) * s
+            ));
+            return t >= 1;
+        });
+
+        // Phase 6 — hold wide (900 ms) ─────────────────────────────────
+        let p6e = 0;
+        phases.push((dt) => {
+            p6e += dt;
+            cam.position.copyFrom(BENCH_WIDE_POS);
+            cam.setTarget(BENCH_WIDE_TGT);
+            return p6e > 900;
+        });
+
+        sub('Your money is gone.',          3000,  300);
+        sub('You trudge away, alone.',       3000, 2000);
+        sub('"Tomorrow is another day…"',    4000, 5200);
+
+        function finish() {
+            if (_done) return;
+            _done = true;
+            timers.forEach(id => clearTimeout(id));
+            document.removeEventListener('keydown', onSkipKey, true);
+            scene.onBeforeRenderObservable.remove(observer);
+            playerMesh.rotation.z = 1.3;
+            playerMesh.position.set(BX, LIE_Y, BZ);
+            resetLimbs();
+            _active = false;
+            if (onComplete) onComplete();
+        }
+        let _done = false;
+
+        function onSkipKey(e) {
+            if (e.code === 'Space' || e.code === 'Enter' || e.code === 'Escape') {
+                e.stopPropagation(); e.preventDefault(); finish();
+            }
+        }
+        document.addEventListener('keydown', onSkipKey, true);
+        timers.push(setTimeout(finish, 15000));
+
+        let _lastT = performance.now();
+        const observer = scene.onBeforeRenderObservable.add(() => {
+            if (_done) return;
+            const now = performance.now();
+            const dt  = now - _lastT;
+            _lastT    = now;
+            if (phase >= phases.length) { finish(); return; }
+            const done = phases[phase](dt);
+            if (done) phase++;
+        });
+    }
+
     // ── Public: query active state ─────────────────────────────────────
     function isActive() {
         return _active;
     }
 
-    return { play, isActive, playIntroCutscene, playInterviewCutscene, playPaydayCutscene, playFailCutscene, playFastFoodCutscene };
+    return { play, isActive, playIntroCutscene, playInterviewCutscene, playPaydayCutscene, playFailCutscene, playFastFoodCutscene, playBrokeCutscene };
 })();
