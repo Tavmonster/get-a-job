@@ -1,4 +1,4 @@
-/**
+﻿/**
  * world.js — Ground, buildings, special zones, park
  * Returns references to key trigger zones and named locations.
  */
@@ -1496,9 +1496,8 @@ const World = (() => {
     }
 
     function getPlayerSpawnPos() {
-        // Spawn in front of the hat store so it’s immediately visible
-        const p = gridPos(HAT_STORE_POS.col, HAT_STORE_POS.row);
-        return new BABYLON.Vector3(p.x, 1, p.z - 11);
+        const p = gridPos(0, 0);
+        return new BABYLON.Vector3(p.x, 1, p.z + 5);
     }
 
     function getTruckSpawnPos() {
@@ -1509,3 +1508,4 @@ const World = (() => {
 
     return { build, getSpecialBuilding, getAllDeliveryPoints, getDeliveryMarkers, getPlayerSpawnPos, getTruckSpawnPos };
 })();
+
