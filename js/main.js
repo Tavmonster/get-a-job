@@ -3,7 +3,7 @@
  */
 (function () {
     const canvas = document.getElementById("renderCanvas");
-    const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
+    const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true, audioEngine: true });
     engine.setHardwareScalingLevel(1);
     // Disable adaptive device ratio scaling — saves a recalculation each frame.
     engine.adaptToDeviceRatio = false;
@@ -42,21 +42,22 @@
         const _DN_NIGHT_FOG   = new BABYLON.Color3(0.02, 0.02, 0.05);
         const _DN_DAY_SKY     = { r: 0.53, g: 0.81, b: 0.98 };
         const _DN_NIGHT_SKY   = { r: 0.03, g: 0.03, b: 0.10 };
+        function _lerpC3(a, b, t) {
+            return new BABYLON.Color3(
+                a.r + (b.r - a.r) * t,
+                a.g + (b.g - a.g) * t,
+                a.b + (b.b - a.b) * t
+            );
+        }
         function _applyNightT(t) {
-            sun.intensity         = _DN_DAY_SUN_I + (_DN_NIGHT_SUN_I - _DN_DAY_SUN_I) * t;
-            sun.diffuse.r         = _DN_DAY_SUN_D.r + (_DN_NIGHT_SUN_D.r - _DN_DAY_SUN_D.r) * t;
-            sun.diffuse.g         = _DN_DAY_SUN_D.g + (_DN_NIGHT_SUN_D.g - _DN_DAY_SUN_D.g) * t;
-            sun.diffuse.b         = _DN_DAY_SUN_D.b + (_DN_NIGHT_SUN_D.b - _DN_DAY_SUN_D.b) * t;
-            ambient.intensity     = _DN_DAY_AMB_I + (_DN_NIGHT_AMB_I - _DN_DAY_AMB_I) * t;
-            ambient.groundColor.r = _DN_DAY_GND.r + (_DN_NIGHT_GND.r - _DN_DAY_GND.r) * t;
-            ambient.groundColor.g = _DN_DAY_GND.g + (_DN_NIGHT_GND.g - _DN_DAY_GND.g) * t;
-            ambient.groundColor.b = _DN_DAY_GND.b + (_DN_NIGHT_GND.b - _DN_DAY_GND.b) * t;
-            scene.clearColor.r    = _DN_DAY_SKY.r + (_DN_NIGHT_SKY.r - _DN_DAY_SKY.r) * t;
-            scene.clearColor.g    = _DN_DAY_SKY.g + (_DN_NIGHT_SKY.g - _DN_DAY_SKY.g) * t;
-            scene.clearColor.b    = _DN_DAY_SKY.b + (_DN_NIGHT_SKY.b - _DN_DAY_SKY.b) * t;
-            scene.fogColor.r      = _DN_DAY_FOG.r + (_DN_NIGHT_FOG.r - _DN_DAY_FOG.r) * t;
-            scene.fogColor.g      = _DN_DAY_FOG.g + (_DN_NIGHT_FOG.g - _DN_DAY_FOG.g) * t;
-            scene.fogColor.b      = _DN_DAY_FOG.b + (_DN_NIGHT_FOG.b - _DN_DAY_FOG.b) * t;
+            sun.intensity       = _DN_DAY_SUN_I + (_DN_NIGHT_SUN_I - _DN_DAY_SUN_I) * t;
+            sun.diffuse         = _lerpC3(_DN_DAY_SUN_D, _DN_NIGHT_SUN_D, t);
+            ambient.intensity   = _DN_DAY_AMB_I + (_DN_NIGHT_AMB_I - _DN_DAY_AMB_I) * t;
+            ambient.groundColor = _lerpC3(_DN_DAY_GND, _DN_NIGHT_GND, t);
+            scene.clearColor.r  = _DN_DAY_SKY.r + (_DN_NIGHT_SKY.r - _DN_DAY_SKY.r) * t;
+            scene.clearColor.g  = _DN_DAY_SKY.g + (_DN_NIGHT_SKY.g - _DN_DAY_SKY.g) * t;
+            scene.clearColor.b  = _DN_DAY_SKY.b + (_DN_NIGHT_SKY.b - _DN_DAY_SKY.b) * t;
+            scene.fogColor      = _lerpC3(_DN_DAY_FOG, _DN_NIGHT_FOG, t);
         }
 
         // ── Fog ─────────────────────────────────────────────────────
@@ -69,12 +70,10 @@
         World.build(scene);
 
         // ── Player ──────────────────────────────────────────────────
-        const playerMesh = Player.init(scene);
-        // Cache child meshes (static after init) and pre-allocate FPV target vector
-        // to avoid per-frame allocations in the render loop.
+        const playerMesh = Player.init(scene);        // Cache child meshes (static after init) and pre-allocate FPV target
+        // vector to avoid per-frame allocations in the render loop.
         const _playerChildMeshes = playerMesh.getChildMeshes();
         const _fpvTarget = new BABYLON.Vector3();
-
         // ── Camera ──────────────────────────────────────────────────
         const mainCamera = GameCamera.init(scene, playerMesh, canvas);
 
@@ -84,8 +83,11 @@
         // ── UI ──────────────────────────────────────────────────────
         UI.init(scene);
 
+        // ── Background music ────────────────────────────────────────
+        MusicManager.init(scene);
+
         // ── Door animation state ───────────────────────────────────
-        const _DOOR_SPEED = 0.12;  // radians per frame
+        const _DOOR_SPEED = 0.08;  // radians per frame
 
         // ── Pointer lock helpers ───────────────────────────────────
         // Flag set when WE release the lock (DOM overlays), so pointerlockchange
@@ -182,7 +184,7 @@
         let paydayReady = false;
         let policeAlerted = false;
         let interviewScore = 0;        let hunger = 100;
-        const _ownedHats = new Set();   // hats purchased this playthrough (unlock once, wear free)
+        const _ownedHats = new Set();   // hats purchased this playthrough
         let _gameOverCause = 'interview';   // 'interview' | 'broke'
         // ── Game state machine ───────────────────────────────────────
         GameState.on((newState, prev) => {
@@ -195,6 +197,7 @@
                     UI.showMission("Find a Job");
                     // Point objective marker at the store
                     if (storeData) Minimap.setObjective(storeData.trigger.position);
+                    MusicManager.play();
                     break;
 
                 case GameState.STATES.INTERVIEW:
@@ -265,6 +268,7 @@
 
                 case GameState.STATES.GAME_OVER:
                     UI.showMission("");
+                    MusicManager.stop();
                     if (_gameOverCause === 'broke') {
                         Cutscene.playBrokeCutscene(scene, playerMesh, mainCamera, _benchPos, () => {
                             Player.setEnabled(false);
@@ -280,6 +284,7 @@
 
                 case GameState.STATES.JAILED:
                     UI.showMission("BUSTED!");
+                    MusicManager.stop();
                     Truck.setDriving(false);
                     Player.setEnabled(false);
                     setTimeout(() => {
@@ -290,9 +295,9 @@
         });
 
         // ── Intro cutscene (in-engine) ────────────────────────────────────
-        // Park bench is always at grid (col 0, row 0) = (-90, 0, -90).
-        // Hardcoded so it stays correct regardless of getPlayerSpawnPos().
-        const _benchPos = new BABYLON.Vector3(-90, 0.75, -90);
+        // Bench is 5 units north of spawn (bench seat top is at y≈0.75).
+        const _spawnPos = World.getPlayerSpawnPos();
+        const _benchPos = new BABYLON.Vector3(_spawnPos.x, 0.75, _spawnPos.z - 5);
         Cutscene.playIntroCutscene(scene, playerMesh, GameCamera.getCamera(), _benchPos, () => {
             Player.teleport(World.getPlayerSpawnPos());
             GameState.set(GameState.STATES.WALK_TO_STORE);
@@ -447,11 +452,11 @@
 
         // ── Render loop ──────────────────────────────────────────────
         scene.registerBeforeRender(() => {
-            // dt = 1.0 at 60 fps; proportionally less/more at other rates.
-            // Capped at 3 to prevent huge jumps after the tab regains focus.
-            const dt = Math.min(engine.getDeltaTime() / (1000 / 60), 3);
             const gs = GameState.get();
             const S  = GameState.STATES;
+            // dt normalised to 1.0 at the 90 fps reference rate used when
+            // tuning speed constants ("1.5x 90fps equiv" commit).
+            const dt = engine.getDeltaTime() * 90 / 1000;
             const playerPos = Player.getPosition();
             const truckPos  = truckMesh ? truckMesh.position : BABYLON.Vector3.Zero();
 
@@ -504,7 +509,7 @@
                 const _curRot = storeData.doorPivot.rotation.y;
                 if (Math.abs(_curRot - _targetRot) > 0.001) {
                     storeData.doorPivot.rotation.y += Math.sign(_targetRot - _curRot) *
-                        Math.min(Math.abs(_targetRot - _curRot), _DOOR_SPEED * dt);
+                        Math.min(Math.abs(_targetRot - _curRot), _DOOR_SPEED);
                 }
             }
 
@@ -520,7 +525,22 @@
                 const _ffCurRot = fastFoodData.doorPivot.rotation.y;
                 if (Math.abs(_ffCurRot - _ffTargetRot) > 0.001) {
                     fastFoodData.doorPivot.rotation.y += Math.sign(_ffTargetRot - _ffCurRot) *
-                        Math.min(Math.abs(_ffTargetRot - _ffCurRot), _DOOR_SPEED * dt);
+                        Math.min(Math.abs(_ffTargetRot - _ffCurRot), _DOOR_SPEED);
+                }
+            }
+
+            // ── Hat Shop door animation ───────────────────────────────────────
+            const _hatDoorUnlocked = gs === S.WALK_TO_STORE || gs === S.PAYDAY ||
+                gs === S.FAST_FOOD || gs === S.HOTEL;
+            if (hatStoreData && hatStoreData.doorPivot && _hatDoorUnlocked) {
+                const _hdx = playerPos.x - hatStoreData.pos.x;
+                const _hdz = playerPos.z - (hatStoreData.pos.z - 5.5);
+                const _nearHatDoor = Math.abs(_hdx) < 4 && _hdz > -3 && _hdz < 3;
+                const _htTargetRot = _nearHatDoor ? hatStoreData.doorOpenRot : 0;
+                const _htCurRot = hatStoreData.doorPivot.rotation.y;
+                if (Math.abs(_htCurRot - _htTargetRot) > 0.001) {
+                    hatStoreData.doorPivot.rotation.y += Math.sign(_htTargetRot - _htCurRot) *
+                        Math.min(Math.abs(_htTargetRot - _htCurRot), _DOOR_SPEED);
                 }
             }
 
@@ -534,7 +554,11 @@
                 Math.abs(playerPos.x - fastFoodData.pos.x) < 6 &&
                 playerPos.z > fastFoodData.pos.z - 6 &&
                 playerPos.z < fastFoodData.pos.z + 6;
-            if (_insideStore || _insideFF) {
+            const _insideHatStore = hatStoreData &&
+                Math.abs(playerPos.x - hatStoreData.pos.x) < 5.5 &&
+                playerPos.z > hatStoreData.pos.z - 5.5 &&
+                playerPos.z < hatStoreData.pos.z + 5.5;
+            if (_insideStore || _insideFF || _insideHatStore) {
                 Player.setFPV(true);
                 // Hide player body so it doesn't clip into view
                 _playerChildMeshes.forEach(m => { m.isVisible = false; });
@@ -740,8 +764,8 @@
                 }
             }
 
-            // Hat Shop — available whenever the player has money and free movement
-            const _hatShopStates = gs === S.PAYDAY || gs === S.FAST_FOOD || gs === S.HOTEL;
+            // Hat Shop — only available after the payday cutscene has completed
+            const _hatShopStates = gs === S.FAST_FOOD || gs === S.HOTEL;
             if (_hatShopStates && hatStoreData) {
                 if (UI.isHatShopOpen()) {
                     // Shop is open — close on E press
@@ -755,7 +779,7 @@
                     // Reset hint active if shop was closed via button
                     if (interactHintActive === "hatshop_open") interactHintActive = "";
 
-                    if (nearTrigger(playerPos, hatStoreData.trigger, 10)) {
+                    if (_insideHatStore) {
                         if (interactHintActive !== "hatshop") {
                             UI.showInteractHint("Press E to browse hats");
                             interactHintActive = "hatshop";
@@ -799,8 +823,6 @@
                             // Can't afford hotel — game over
                             UI.hideInteractHint();
                             interactHintActive = "";
-                            UI.hideInteractHint();
-                            interactHintActive = "";
                             Player.setEnabled(false);
                             _gameOverCause = 'broke';
                             GameState.set(S.GAME_OVER);
@@ -808,6 +830,7 @@
                             Player.setEnabled(false);
                             UI.hideInteractHint();
                             interactHintActive = "";
+                            MusicManager.stop();
                             Cutscene.play('hotel', () => {
                                 UI.setMoney(UI.getMoney() - HOTEL_COST);
                                 UI.showEndScreen(true, () => location.reload());
@@ -837,10 +860,16 @@
     // ── Resize handler ───────────────────────────────────────────────
     window.addEventListener("resize", () => engine.resize());
 
-    // ── Start render loop ────────────────────────────────────────────
+    // ── Start render loop (manual 60 fps cap) ────────────────────────
+    // Babylon's runRenderLoop already uses requestAnimationFrame (display-rate
+    // capped), but adding an explicit time gate ensures we never burn CPU on
+    // displays/drivers that fire rAF faster than 60 Hz.
     let _lastRender = 0;
     const _frameMs  = 1000 / 60;
     engine.runRenderLoop(() => {
+        // const now = performance.now();
+        // if (now - _lastRender < _frameMs) return;
+        // _lastRender = now;
         scene.render();
     });
 

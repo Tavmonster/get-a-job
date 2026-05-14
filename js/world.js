@@ -854,9 +854,129 @@ const World = (() => {
         counter.position.set(SX, 0.55, SZ + 2.0);
         counter.material = mat(scene, "#7d3c98"); counter.checkCollisions = true;
 
-        const counterBlocker = BABYLON.MeshBuilder.CreateBox("hatCounterBlocker", { width: w - 5, height: 2.5, depth: 1.2 }, scene);
+        // Full-width invisible blocker — spans wall to wall so the player
+        // cannot squeeze around either side of the counter.
+        const counterBlocker = BABYLON.MeshBuilder.CreateBox("hatCounterBlocker", { width: w + 1, height: 2.5, depth: 1.2 }, scene);
         counterBlocker.position.set(SX, 1.25, SZ + 2.0);
         counterBlocker.isVisible = false; counterBlocker.checkCollisions = true;
+
+        // ── North-wall shelving unit ───────────────────────────────────
+        // shelfBack flush against north inner wall (inner face at SZ+5.35)
+        const shelfBack = BABYLON.MeshBuilder.CreateBox("hatShelfBack",
+            { width: 8.7, height: 2.0, depth: 0.12 }, scene);
+        shelfBack.position.set(SX, 2.6, SZ + 5.29);
+        shelfBack.material = mat(scene, "#5d3a1a");
+        shelfBack.isPickable = false;
+
+        const shelfMat = mat(scene, "#7d5a3c");
+        const bxColors = ["#3498db", "#c0392b", "#2c3e50", "#27ae60"];
+        [1.8, 3.1].forEach((sy, si) => {
+            const shelf = BABYLON.MeshBuilder.CreateBox("hatShelf_" + si,
+                { width: 8.5, height: 0.1, depth: 0.4 }, scene);
+            shelf.position.set(SX, sy, SZ + 5.03);
+            shelf.material = shelfMat;
+            shelf.isPickable = false;
+
+            [-3.0, -1.0, 1.0, 3.0].forEach((ox, bi) => {
+                const bx = BABYLON.MeshBuilder.CreateBox("hatBox_" + si + "_" + bi,
+                    { width: 0.55, height: 0.40, depth: 0.36 }, scene);
+                bx.position.set(SX + ox, sy + 0.25, SZ + 5.03);
+                bx.material = mat(scene, bxColors[bi]);
+                bx.isPickable = false;
+
+                const lid = BABYLON.MeshBuilder.CreateBox("hatBoxLid_" + si + "_" + bi,
+                    { width: 0.58, height: 0.07, depth: 0.39 }, scene);
+                lid.position.set(SX + ox, sy + 0.495, SZ + 5.03);
+                lid.material = mat(scene, "#e8e0d8");
+                lid.isPickable = false;
+            });
+        });
+
+        // ── Shopkeeper NPC (stationary, behind counter, facing south) ─
+        const skRoot = BABYLON.MeshBuilder.CreateCylinder("shopkeeperRoot",
+            { height: 1.6, diameter: 0.6, tessellation: 8 }, scene);
+        const skRootMat = new BABYLON.StandardMaterial("shopkeeperRootMat", scene);
+        skRootMat.alpha = 0;
+        skRoot.material = skRootMat;
+        skRoot.isPickable = false;
+        skRoot.position.set(SX, 1.0, SZ + 3.5);
+        skRoot.rotation.y = Math.PI; // face toward door
+
+        const skLegL = BABYLON.MeshBuilder.CreateCylinder("skLegL",
+            { height: 0.55, diameter: 0.21, tessellation: 8 }, scene);
+        skLegL.material = mat(scene, "#4a235a");
+        skLegL.position.set(-0.14, -0.47, 0);
+        skLegL.parent = skRoot; skLegL.isPickable = false;
+
+        const skLegR = BABYLON.MeshBuilder.CreateCylinder("skLegR",
+            { height: 0.55, diameter: 0.21, tessellation: 8 }, scene);
+        skLegR.material = mat(scene, "#4a235a");
+        skLegR.position.set(0.14, -0.47, 0);
+        skLegR.parent = skRoot; skLegR.isPickable = false;
+
+        const skShoeL = BABYLON.MeshBuilder.CreateBox("skShoeL",
+            { width: 0.18, height: 0.08, depth: 0.28 }, scene);
+        skShoeL.material = mat(scene, "#181010");
+        skShoeL.position.set(-0.14, -0.77, 0.04);
+        skShoeL.parent = skRoot; skShoeL.isPickable = false;
+
+        const skShoeR = BABYLON.MeshBuilder.CreateBox("skShoeR",
+            { width: 0.18, height: 0.08, depth: 0.28 }, scene);
+        skShoeR.material = mat(scene, "#181010");
+        skShoeR.position.set(0.14, -0.77, 0.04);
+        skShoeR.parent = skRoot; skShoeR.isPickable = false;
+
+        const skTorso = BABYLON.MeshBuilder.CreateBox("skTorso",
+            { width: 0.50, height: 0.56, depth: 0.27 }, scene);
+        skTorso.material = mat(scene, "#f5f5f5");
+        skTorso.position.y = 0.08;
+        skTorso.parent = skRoot; skTorso.isPickable = false;
+
+        const skArmL = BABYLON.MeshBuilder.CreateCylinder("skArmL",
+            { height: 0.48, diameter: 0.16, tessellation: 8 }, scene);
+        skArmL.material = mat(scene, "#f5f5f5");
+        skArmL.rotation.z = -0.15;
+        skArmL.position.set(-0.30, 0.13, 0);
+        skArmL.parent = skRoot; skArmL.isPickable = false;
+
+        const skArmR = BABYLON.MeshBuilder.CreateCylinder("skArmR",
+            { height: 0.48, diameter: 0.16, tessellation: 8 }, scene);
+        skArmR.material = mat(scene, "#f5f5f5");
+        skArmR.rotation.z = 0.15;
+        skArmR.position.set(0.30, 0.13, 0);
+        skArmR.parent = skRoot; skArmR.isPickable = false;
+
+        const skNeck = BABYLON.MeshBuilder.CreateCylinder("skNeck",
+            { height: 0.13, diameter: 0.18, tessellation: 8 }, scene);
+        skNeck.material = mat(scene, "#e8c9a0");
+        skNeck.position.y = 0.42;
+        skNeck.parent = skRoot; skNeck.isPickable = false;
+
+        const skHead = BABYLON.MeshBuilder.CreateSphere("skHead",
+            { diameter: 0.46, segments: 8 }, scene);
+        skHead.material = mat(scene, "#e8c9a0");
+        skHead.position.y = 0.60;
+        skHead.parent = skRoot; skHead.isPickable = false;
+
+        const skHair = BABYLON.MeshBuilder.CreateSphere("skHair",
+            { diameter: 0.48, segments: 6 }, scene);
+        skHair.material = mat(scene, "#301808");
+        skHair.position.set(0, 0.67, 0);
+        skHair.scaling.y = 0.5;
+        skHair.parent = skRoot; skHair.isPickable = false;
+
+        // Small top hat — identifies this NPC as the hat shop worker
+        const skHatCrown = BABYLON.MeshBuilder.CreateCylinder("skHatCrown",
+            { height: 0.30, diameter: 0.40, tessellation: 8 }, scene);
+        skHatCrown.material = mat(scene, "#9b59b6");
+        skHatCrown.position.set(0, 0.97, 0);
+        skHatCrown.parent = skRoot; skHatCrown.isPickable = false;
+
+        const skHatBrim = BABYLON.MeshBuilder.CreateCylinder("skHatBrim",
+            { height: 0.05, diameter: 0.72, tessellation: 12 }, scene);
+        skHatBrim.material = mat(scene, "#9b59b6");
+        skHatBrim.position.set(0, 0.83, 0);
+        skHatBrim.parent = skRoot; skHatBrim.isPickable = false;
 
         // ── Hat display stands (3 pedestal + decorative hat per stand) ─
         const standMat = mat(scene, "#b0a090");
