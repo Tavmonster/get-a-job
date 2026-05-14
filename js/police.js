@@ -2,15 +2,16 @@
  * police.js — Police car that patrols the outer ring and chases/arrests the
  * player when a pedestrian is hit by the truck.
  *
- * Patrol: 20-waypoint clockwise loop covering every road-crossing on the
- *   outer ring (right-lane offsets).  Uses alignMult so the car brakes while
+ * Patrol: 27-waypoint clockwise loop covering the true outermost road ring
+ *   (X=±105, Z=±105, right-lane offsets ±103).  Uses alignMult so the car brakes while
  *   turning at corners — prevents it from cutting onto the sidewalk.
  *   Avoidance rays stop it from ramming other NPC cars.
  *   An invisible collider (isPickable, metadata.isNPCCar=true) lets NPC-car
  *   avoidance rays detect the police car in return.
  *
- * Chase: navigates the 36-node road-centreline grid using greedy
- *   immediate-neighbour selection so the car always stays on roads.
+ * Chase: navigates the 64-node road-centreline grid (all 8 roads per axis,
+ *   including the outermost ±105 ring) using greedy immediate-neighbour
+ *   selection so the car always stays on roads.
  *   No avoidance during chase — police ignore other traffic.
  *
  * Player knockback: applied whenever the player body comes within HIT_DIST
@@ -43,32 +44,33 @@ const PoliceCar = (() => {
 
     // ── Patrol route ────────────────────────────────────────────────────
     // Full outer-ring patrol, clockwise, right-lane offsets.
-    //   South on X=73 (road X=75)   |  West on Z=73 (road Z=75)
-    //   North on X=-73 (road X=-75) |  East on Z=-73 (road Z=-75)
+    //   South on X=103 (road X=105)  |  West on Z=103 (road Z=105)
+    //   North on X=-103 (road X=-105)|  East on Z=-103 (road Z=-105)
     //
     // PARK AVOIDANCE: park is X ∈ [-105,-45], Z ∈ [-105,-45].
-    // Road X=-75 (right lane X=-73) passes through the park for Z < -45.
-    // At the Z=-15 intersection we jog east to X=-43 (road X=-45, right lane
-    // going north) which is east of the park boundary (X=-45), then continue
-    // north on X=-43 and rejoin the Z=-73 east road outside the park.
+    // Road X=-105 (right lane X=-103) enters the park zone for Z < -45.
+    // At Z=-15 we jog east to X=-43 (road X=-45, right lane going north)
+    // which is east of the park boundary (X=-45), continue north on X=-43,
+    // then turn east on Z=-103 to rejoin the outer ring.
     const PATROL_ROUTE = [
-        // NE corner -> SE corner (south, X=73)
-        [ 73,-73], [ 73,-45], [ 73,-15], [ 73, 15], [ 73, 45],
-        // SE corner -> SW corner (west, Z=73)
-        [ 73, 73], [ 45, 73], [ 15, 73], [-15, 73], [-45, 73],
-        // SW corner, go north on X=-73 while clear of park (Z > -45)
-        [-73, 73], [-73, 45], [-73, 15],
+        // NE corner -> SE corner (south, X=103)
+        [103,-103], [103,-75], [103,-45], [103,-15], [103,15], [103,45], [103,75],
+        // SE corner -> SW corner (west, Z=103)
+        [103,103], [75,103], [45,103], [15,103], [-15,103], [-45,103], [-75,103],
+        // SW corner, go north on X=-103 while clear of park (Z > -45 is OK)
+        [-103,103], [-103,75], [-103,45], [-103,15],
         // Jog east at Z=-15 onto road X=-45 (right lane X=-43), east of park
-        [-73,-15], [-43,-15],
+        [-103,-15], [-43,-15],
         // Continue north on X=-43 through park-zone latitude
-        [-43,-45], [-43,-73],
-        // Rejoin east road Z=-73 and head back to NE corner
-        [-15,-73], [ 15,-73], [ 45,-73],
+        [-43,-45], [-43,-75], [-43,-103],
+        // East on Z=-103 back to NE corner
+        [-15,-103], [15,-103], [45,-103], [75,-103],
     ];
 
-    // ── Chase pathfinding: road-centreline grid (36 nodes) ──────────────
+    // ── Chase pathfinding: road-centreline grid (64 nodes) ──────────────
     // Greedy immediate-neighbour selection keeps the car on roads.
-    const ROAD_COORDS = [-75, -45, -15, 15, 45, 75];
+    // All 8 roads per axis included so police can chase onto outermost ring.
+    const ROAD_COORDS = [-105, -75, -45, -15, 15, 45, 75, 105];
     const ROAD_IDX    = {};
     ROAD_COORDS.forEach((v, i) => { ROAD_IDX[v] = i; });
 
@@ -273,8 +275,8 @@ const PoliceCar = (() => {
         pivot_    = built.pivot;
         collider_ = built.collider;
 
-        // Start at index 10 (SW corner [-73, 73]), heading north
-        const startIdx = 10;
+        // Start at index 14 (SW corner [-103,103]), heading north
+        const startIdx = 14;
         patrolIdx = (startIdx + 1) % PATROL_ROUTE.length;
         const startWp = PATROL_ROUTE[startIdx];
         pivot_.position.set(startWp[0], 0, startWp[1]);
